@@ -1,0 +1,36 @@
+sql {
+    driver = "rlm_sql_postgresql"
+
+    dialect = "postgresql"
+
+    # Pripojenie na PostgreSQL
+    server = "${FR_POSTGRES_HOST}"
+    port = 5432
+    login = "${FR_POSTGRES_USER}"
+    password = "${FR_POSTGRES_PASS}"
+    radius_db = "${FR_POSTGRES_DB}"
+
+    # Accounting
+    acct_table1 = "radius_sessions"
+    acct_table2 = "radius_sessions"
+
+    # Postauth
+    postauth_table = "radius_postauth"
+
+    # Používame len accounting (autentifikácia ide cez LDAP)
+    read_clients = no
+
+    pool {
+        start = 5
+        min = 4
+        max = 10
+        spare = 3
+        uses = 0
+        retry_delay = 30
+        lifetime = 0
+        idle_timeout = 60
+    }
+
+    # Cesty k SQL dotazom
+    query_file = "${modconfdir}/${.:name}/postgresql/queries.conf"
+}

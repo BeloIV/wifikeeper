@@ -1,0 +1,62 @@
+eap {
+    # Predvolená EAP metóda
+    default_eap_type = peap
+
+    # Čas platnosti EAP session (sekundy)
+    timer_expire = 60
+
+    # Ignorovať neznáme EAP typy
+    ignore_unknown_eap_types = no
+
+    cisco_accounting_username_bug = no
+
+    max_sessions = ${max_requests}
+
+    # ── TLS pre PEAP ──────────────────────────────────────────────────────────
+    tls-config tls-common {
+        # V dev: self-signed cert generovaný skriptom scripts/gen-self-signed.sh
+        # V prod: Let's Encrypt cert (montovaný z /etc/letsencrypt/live/DOMAIN)
+        private_key_file = ${certdir}/server.key
+        certificate_file = ${certdir}/server.crt
+        ca_file = ${certdir}/ca.crt
+
+        private_key_password =
+
+        dh_file = ${certdir}/dh
+        random_file = /dev/urandom
+
+        cipher_list = "ECDHE+AESGCM:DHE+AESGCM:ECDHE+AES256:DHE+AES256:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!3DES:!MD5:!PSK"
+        cipher_server_preference = no
+
+        tls_min_version = "1.2"
+        tls_max_version = "1.3"
+
+        ecdh_curve = "prime256v1"
+
+        cache {
+            enable = yes
+            lifetime = 24
+            max_entries = 255
+        }
+
+        verify {
+        }
+
+        ocsp {
+            enable = no
+        }
+    }
+
+    # ── PEAP (tuneluje MSCHAPv2) ──────────────────────────────────────────────
+    peap {
+        tls = tls-common
+        default_eap_type = mschapv2
+        copy_request_to_tunnel = no
+        use_tunneled_reply = yes
+        virtual_server = "inner-tunnel"
+    }
+
+    # ── MSCHAPv2 vo vnútornom tuneli ──────────────────────────────────────────
+    mschapv2 {
+    }
+}

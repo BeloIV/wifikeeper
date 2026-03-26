@@ -1,0 +1,40 @@
+server inner-tunnel {
+
+    listen {
+        type = auth
+        ipaddr = 127.0.0.1
+        port = 18120
+    }
+
+    authorize {
+        filter_username
+        chap
+        mschap
+        suffix
+        ldap
+        if (ok || updated) {
+            update control {
+                Auth-Type := ldap
+            }
+        }
+        expiration
+        logintime
+    }
+
+    authenticate {
+        Auth-Type ldap {
+            ldap
+        }
+        Auth-Type MS-CHAP {
+            mschap
+        }
+        eap
+    }
+
+    post-auth {
+        vlan_policy
+        Post-Auth-Type REJECT {
+            attr_filter.access_reject
+        }
+    }
+}

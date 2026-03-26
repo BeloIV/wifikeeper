@@ -1,0 +1,81 @@
+server default {
+
+    listen {
+        type = auth
+        ipaddr = *
+        port = 1812
+    }
+
+    listen {
+        type = acct
+        ipaddr = *
+        port = 1813
+    }
+
+    # CoA – Change of Authorization (odpojenie usera)
+    listen {
+        type = coa
+        ipaddr = *
+        port = 3799
+    }
+
+    # ── Autentifikácia ────────────────────────────────────────────────────────
+    authorize {
+        filter_username
+        preprocess
+        chap
+        mschap
+        digest
+        suffix
+        eap {
+            ok = return
+        }
+        ldap
+        if (ok || updated) {
+            update control {
+                Auth-Type := ldap
+            }
+        }
+        expiration
+        logintime
+    }
+
+    authenticate {
+        Auth-Type ldap {
+            ldap
+        }
+        Auth-Type MS-CHAP {
+            mschap
+        }
+        eap
+    }
+
+    # ── Accounting ────────────────────────────────────────────────────────────
+    preacct {
+        preprocess
+        acct_unique
+        suffix
+        files
+    }
+
+    accounting {
+        detail
+        sql
+        exec
+        attr_filter.accounting_response
+    }
+
+    # ── Post-Auth: VLAN priradenie + accounting ───────────────────────────────
+    post-auth {
+        # Prirad VLAN podľa LDAP skupiny
+        vlan_policy
+
+        # Zaloguj úspešné autentifikácie
+        sql
+
+        Post-Auth-Type REJECT {
+            attr_filter.access_reject
+            sql
+        }
+    }
+}

@@ -1,0 +1,166 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wifimanager}
+      POSTGRES_USER: ${POSTGRES_USER:-wifimanager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wifimanager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    restart: unless-stopped
+    environment:
+      LDAP_ORGANISATION: "Salezianske oratorium"
+      LDAP_DOMAIN: ${LDAP_DOMAIN:-oratko.local}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=oratko,dc=local}
+      LDAP_ADMIN_USERNAME: admin
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD}
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: readonly
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_PASSWORD}
+      LDAP_RFC2307BIS_SCHEMA: "false"
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: "false"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+    ports:
+      - "389:389"
+
+  freeradius:
+    build:
+      context: ./radius
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openldap:
+        condition: service_started
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+      - "3799:3799/udp"
+    volumes:
+      - ./radius/config:/etc/freeradius/3.0
+      - ./certs:/etc/freeradius/3.0/certs
+    environment:
+      FR_POSTGRES_HOST: postgres
+      FR_POSTGRES_DB: ${POSTGRES_DB:-wifimanager}
+      FR_POSTGRES_USER: ${POSTGRES_USER:-wifimanager}
+      FR_POSTGRES_PASS: ${POSTGRES_PASSWORD}
+      FR_LDAP_HOST: openldap
+      FR_LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=oratko,dc=local}
+      FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN:-dc=oratko,dc=local}
+      FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
+
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wifimanager}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB:-wifimanager}
+      REDIS_URL: redis://redis:6379/0
+      LDAP_SERVER_URI: ldap://openldap
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=oratko,dc=local}
+      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN:-dc=oratko,dc=local}
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "True"
+      ALLOWED_HOSTS: "*"
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  celery:
+    build:
+      context: ./backend
+      target: dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wifimanager}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB:-wifimanager}
+      REDIS_URL: redis://redis:6379/0
+      LDAP_SERVER_URI: ldap://openldap
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=oratko,dc=local}
+      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN:-dc=oratko,dc=local}
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NEXT_PUBLIC_API_URL: ""
+    ports:
+      - "3006:3006"
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+
+volumes:
+  postgres_data:
+  ldap_data:
+  ldap_config:

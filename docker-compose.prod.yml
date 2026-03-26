@@ -1,0 +1,178 @@
+version: "3.9"
+
+# Production Docker Compose – Let's Encrypt + Cloudflare DNS-01
+# Spustenie: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  openldap:
+    image: osixia/openldap:1.5.0
+    restart: always
+    environment:
+      LDAP_ORGANISATION: "Salezianske oratorium"
+      LDAP_DOMAIN: ${LDAP_DOMAIN}
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_ADMIN_USERNAME: admin
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD}
+      LDAP_READONLY_USER: "true"
+      LDAP_READONLY_USER_USERNAME: readonly
+      LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_PASSWORD}
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ca.crt
+      LDAP_TLS_ENFORCE: "false"
+    volumes:
+      - ldap_data:/var/lib/ldap
+      - ldap_config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+      - /etc/letsencrypt/live/${DOMAIN}:/container/service/slapd/assets/certs:ro
+
+  freeradius:
+    build:
+      context: ./radius
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openldap:
+        condition: service_started
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+      - "3799:3799/udp"
+    volumes:
+      - ./radius/config:/etc/freeradius/3.0
+      - /etc/letsencrypt/live/${DOMAIN}:/etc/freeradius/3.0/certs:ro
+    environment:
+      FR_POSTGRES_HOST: postgres
+      FR_POSTGRES_DB: ${POSTGRES_DB}
+      FR_POSTGRES_USER: ${POSTGRES_USER}
+      FR_POSTGRES_PASS: ${POSTGRES_PASSWORD}
+      FR_LDAP_HOST: openldap
+      FR_LDAP_BASE_DN: ${LDAP_BASE_DN}
+      FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN}
+      FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
+
+  backend:
+    build:
+      context: ./backend
+      target: prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      LDAP_SERVER_URI: ldap://openldap
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "False"
+      ALLOWED_HOSTS: ${DOMAIN}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    command: >
+      sh -c "python manage.py migrate &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+
+  celery:
+    build:
+      context: ./backend
+      target: prod
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      LDAP_SERVER_URI: ldap://openldap
+      LDAP_BASE_DN: ${LDAP_BASE_DN}
+      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      EMAIL_HOST: ${EMAIL_HOST}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  certbot:
+    image: certbot/dns-cloudflare:latest
+    restart: "no"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot/cloudflare.ini:/opt/cloudflare.ini:ro
+    command: >
+      certonly
+      --dns-cloudflare
+      --dns-cloudflare-credentials /opt/cloudflare.ini
+      --email ${ADMIN_EMAIL}
+      --agree-tos
+      --no-eff-email
+      -d ${DOMAIN}
+      -d www.${DOMAIN}
+
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_URL: ""
+
+  nginx:
+    image: nginx:1.25-alpine
+    restart: always
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+
+volumes:
+  postgres_data:
+  ldap_data:
+  ldap_config:

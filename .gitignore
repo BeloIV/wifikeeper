@@ -1,0 +1,30 @@
+# ── Secrets ───────────────────────────────────────────────────
+.env
+certbot/cloudflare.ini
+certs/
+
+# ── Python / Django ───────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# ── Node / Next.js ────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/out/
+
+# ── Docker volumes ────────────────────────────────────────────
+volumes/
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp

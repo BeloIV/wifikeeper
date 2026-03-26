@@ -1,0 +1,59 @@
+# =============================================================================
+# OpenLDAP bootstrap – inicializácia štruktúry pre wifi-manager
+# Automaticky načítané pri prvom štarte osixia/openldap kontajnera
+# =============================================================================
+
+# ── Organizačné jednotky ──────────────────────────────────────────────────────
+dn: ou=users,dc=oratko,dc=local
+objectClass: organizationalUnit
+ou: users
+description: Pouzivatelia WiFi siete
+
+dn: ou=groups,dc=oratko,dc=local
+objectClass: organizationalUnit
+ou: groups
+description: Skupiny pre VLAN priradenie
+
+# ── Skupiny (groupOfNames vyžaduje aspoň 1 člena – použijeme dummy) ───────────
+
+# VLAN 10 – SDB (WPA2 Personal riešené samostatne, skupina len pre poriadok)
+dn: cn=sdb,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: sdb
+description: Salezianski dobrovolnici - VLAN 10
+member: uid=dummy,ou=users,dc=oratko,dc=local
+
+# VLAN 20 – Animátori
+dn: cn=animatori,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: animatori
+description: Animatori - VLAN 20 - SSID Oratko
+member: uid=dummy,ou=users,dc=oratko,dc=local
+
+# VLAN 20 – FMA (Dcéry Márie Pomocnice)
+dn: cn=fma,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: fma
+description: FMA - VLAN 20 - SSID Oratko
+member: uid=dummy,ou=users,dc=oratko,dc=local
+
+# VLAN 30 – Spolupracovníci
+dn: cn=spolupracovnici,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: spolupracovnici
+description: Spolupracovnici - VLAN 30 - SSID Oratko
+member: uid=dummy,ou=users,dc=oratko,dc=local
+
+# VLAN 40 – Hostia
+dn: cn=hostia,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: hostia
+description: Hostia - VLAN 40 - SSID Oratko
+member: uid=dummy,ou=users,dc=oratko,dc=local
+
+# VLAN 40 – Dočasný prístup (jednorazové/časové kľúče)
+dn: cn=docasny,ou=groups,dc=oratko,dc=local
+objectClass: groupOfNames
+cn: docasny
+description: Docasny pristup - VLAN 40 - SSID Oratko - spravovane Celery
+member: uid=dummy,ou=users,dc=oratko,dc=local
