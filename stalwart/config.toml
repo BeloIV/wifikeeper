@@ -1,0 +1,43 @@
+# Stalwart Mail Server – dev config
+# Používa sa pre lokálny vývoj. BEZ TLS, bez autentifikácie.
+# Produkcia: nakonfiguruj cez admin UI na :8080 alebo uprav tento súbor.
+
+[server]
+hostname = "mail.oratko.local"
+
+# ── Listenery ─────────────────────────────────────────────────────────────────
+
+[server.listener."submission"]
+bind = ["[::]:587"]
+protocol = "smtp"
+
+[server.listener."management"]
+bind = ["[::]:8080"]
+protocol = "http"
+
+# ── SMTP session – dev: relay bez autentifikácie ──────────────────────────────
+
+[session.ehlo]
+require = false
+
+[session.auth]
+# Dev: autentifikácia nie je vyžadovaná (Django posiela bez credentials)
+require = false
+mechanisms = []
+
+[session.rcpt]
+# Dev: relay povolený pre všetkých (len interný Docker sieťový rozsah)
+relay = true
+
+# ── Úložisko ──────────────────────────────────────────────────────────────────
+
+[store."rocksdb"]
+type = "rocksdb"
+path = "/opt/stalwart/data"
+compression = "lz4"
+
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"

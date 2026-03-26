@@ -73,6 +73,16 @@ services:
       FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN:-dc=oratko,dc=local}
       FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
 
+  stalwart:
+    image: stalwartlabs/mail-server:latest
+    restart: unless-stopped
+    volumes:
+      - ./stalwart/config.toml:/opt/stalwart/etc/config.toml:ro
+      - stalwart_data:/opt/stalwart
+    ports:
+      - "8025:587"   # SMTP submission (localhost:8025 → Stalwart:587)
+      - "8080:8080"  # Admin UI
+
   backend:
     build:
       context: ./backend
@@ -83,6 +93,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      stalwart:
+        condition: service_started
     volumes:
       - ./backend:/app
     environment:
@@ -93,13 +105,15 @@ services:
       LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN:-dc=oratko,dc=local}
       LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       SECRET_KEY: ${DJANGO_SECRET_KEY}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "True"
       ALLOWED_HOSTS: "*"
-      EMAIL_HOST: ${EMAIL_HOST:-localhost}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_HOST: stalwart
+      EMAIL_PORT: "587"
+      EMAIL_USER: ""
+      EMAIL_PASSWORD: ""
+      EMAIL_USE_TLS: "False"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: >
       sh -c "python manage.py migrate &&
@@ -115,6 +129,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      stalwart:
+        condition: service_started
     volumes:
       - ./backend:/app
     environment:
@@ -125,11 +141,13 @@ services:
       LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN:-dc=oratko,dc=local}
       LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       SECRET_KEY: ${DJANGO_SECRET_KEY}
-      EMAIL_HOST: ${EMAIL_HOST:-localhost}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER:-}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
+      EMAIL_HOST: stalwart
+      EMAIL_PORT: "587"
+      EMAIL_USER: ""
+      EMAIL_PASSWORD: ""
+      EMAIL_USE_TLS: "False"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
@@ -164,3 +182,4 @@ volumes:
   postgres_data:
   ldap_data:
   ldap_config:
+  stalwart_data:

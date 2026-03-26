@@ -79,6 +79,20 @@ services:
       FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN}
       FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
 
+  stalwart:
+    image: stalwartlabs/mail-server:latest
+    restart: always
+    volumes:
+      - stalwart_data:/opt/stalwart
+      - /etc/letsencrypt/live/${DOMAIN}:/opt/stalwart/etc/certs:ro
+    ports:
+      - "25:25"      # SMTP inbound
+      - "587:587"    # SMTP submission
+      - "465:465"    # SMTPS (implicit TLS)
+      - "993:993"    # IMAPS
+    environment:
+      STALWART_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD}
+
   backend:
     build:
       context: ./backend
@@ -89,6 +103,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      stalwart:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -97,13 +113,15 @@ services:
       LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
       LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       SECRET_KEY: ${DJANGO_SECRET_KEY}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "False"
       ALLOWED_HOSTS: ${DOMAIN}
-      EMAIL_HOST: ${EMAIL_HOST}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_HOST: stalwart
+      EMAIL_PORT: "587"
+      EMAIL_USER: ${STALWART_DJANGO_USER}
+      EMAIL_PASSWORD: ${STALWART_DJANGO_PASSWORD}
+      EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: >
       sh -c "python manage.py migrate &&
@@ -119,6 +137,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      stalwart:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -127,11 +147,13 @@ services:
       LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
       LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
       SECRET_KEY: ${DJANGO_SECRET_KEY}
-      EMAIL_HOST: ${EMAIL_HOST}
-      EMAIL_PORT: ${EMAIL_PORT:-587}
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
+      EMAIL_HOST: stalwart
+      EMAIL_PORT: "587"
+      EMAIL_USER: ${STALWART_DJANGO_USER}
+      EMAIL_PASSWORD: ${STALWART_DJANGO_PASSWORD}
+      EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
@@ -176,3 +198,4 @@ volumes:
   postgres_data:
   ldap_data:
   ldap_config:
+  stalwart_data:
