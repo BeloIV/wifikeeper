@@ -7,6 +7,11 @@ from django_auth_ldap.config import LDAPSearch, GroupOfNamesType
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ['SECRET_KEY']
+# Fernet key pre šifrovanie citlivých DB polí (ldap_password v TempKey).
+# Generuj: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = os.environ['FIELD_ENCRYPTION_KEY']
+# RADIUS CoA shared secret – musí súhlasiť s NAS (UniFi AP).
+RADIUS_COA_SECRET = os.environ['RADIUS_COA_SECRET']
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 APPEND_SLASH = False

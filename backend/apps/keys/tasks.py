@@ -128,6 +128,8 @@ def send_key_email(key_id: str, recipient_email: str):
     """
     from .models import TempKey
 
+    from .crypto import decrypt_password
+
     try:
         key = TempKey.objects.get(id=key_id)
     except TempKey.DoesNotExist:
@@ -143,7 +145,7 @@ def send_key_email(key_id: str, recipient_email: str):
         f'Vaše prihlasovacie údaje pre WiFi sieť Oratko:\n\n'
         f'  Sieť:   Oratko\n'
         f'  Meno:   {key.ldap_username}\n'
-        f'  Heslo:  {key.ldap_password}\n'
+        f'  Heslo:  {decrypt_password(key.ldap_password)}\n'
         f'  Typ:    {validity_text}\n\n'
         f'Ak potrebujete pomoc s pripojením, kontaktujte správcu siete.\n\n'
         f'Saleziánske oratórium'

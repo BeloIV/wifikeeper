@@ -136,7 +136,7 @@ class TempKeyQRView(APIView):
             return Response({'detail': 'Kľúč nenájdený.'}, status=404)
 
         # QR kód vo formáte WiFi: WIFI:T:WPA;S:Oratko;P:heslo;H:false;;
-        wifi_string = f'WIFI:T:WPA;S:Oratko;P:{key.ldap_password};;'
+        wifi_string = f'WIFI:T:WPA;S:Oratko;P:{decrypt_password(key.ldap_password)};;'
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,

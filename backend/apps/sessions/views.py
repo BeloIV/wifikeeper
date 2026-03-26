@@ -1,3 +1,4 @@
+import re
 import subprocess
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -45,9 +46,15 @@ class DisconnectUserView(APIView):
         nas_ip = str(session.nas_ip_address)
         username = session.username
 
+        # Validácia hodnôt z DB pred vložením do radclient stdin (C5)
+        if not re.fullmatch(r'[A-Fa-f0-9\-]{8,64}', session.acct_session_id):
+            return Response({'detail': 'Neplatný formát acct_session_id.'}, status=500)
+        if not re.fullmatch(r'[a-zA-Z0-9._@\-]{1,64}', username):
+            return Response({'detail': 'Neplatný formát username.'}, status=500)
+
         # Pošli CoA Disconnect-Request cez radclient
         from django.conf import settings
-        radius_secret = getattr(settings, 'RADIUS_COA_SECRET', 'testing123')
+        radius_secret = settings.RADIUS_COA_SECRET  # Chýbajúci env var = fail loud (C4)
 
         cmd = [
             'radclient', '-x',
