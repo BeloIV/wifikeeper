@@ -39,9 +39,24 @@ from django.core.mail import send_mail
 recipient = '$RECIPIENT'
 sender    = '$SENDER'
 
+import datetime
+now = datetime.datetime.now().strftime('%d.%m.%Y %H:%M:%S')
+
 result = send_mail(
-    subject='[wifikeeper] Test emailu',
-    message='Cau Didi, toto je testovací email z wifikeepera. ',
+    subject='[WiFi Oratko] Test odosielania emailov',
+    message=f'''Ahoj,
+
+tento email bol odoslaný automaticky ako overenie SMTP konfigurácie.
+
+  Odosielateľ : {sender}
+  Príjemca    : {recipient}
+  Čas odoslania: {now}
+
+Ak si dostal tento email, Brevo SMTP relay funguje správne.
+
+--
+WiFi správca – Saleziánske oratorium Prešov
+''',
     from_email=sender,
     recipient_list=[recipient],
     fail_silently=False,
