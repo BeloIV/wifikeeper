@@ -73,6 +73,7 @@ LDAP_ADMIN_PASSWORD=$(gen_pass)
 LDAP_CONFIG_PASSWORD=$(gen_pass)
 LDAP_READONLY_PASSWORD=$(gen_pass)
 RADIUS_SECRET=$(gen_hex)
+RADIUS_COA_SECRET=$(gen_hex)
 DJANGO_SECRET_KEY=$(gen_secret)
 UNIFI_MONGO_PASS=$(gen_pass)
 DJANGO_SUPERUSER_PASSWORD=$(gen_pass)
@@ -105,6 +106,8 @@ LDAP_READONLY_PASSWORD=${LDAP_READONLY_PASSWORD}
 
 # ── FreeRADIUS ────────────────────────────────────────────────────────────────
 RADIUS_SECRET=${RADIUS_SECRET}
+# CoA (Disconnect-Request) secret – musí súhlasiť s NAS (UniFi AP)
+RADIUS_COA_SECRET=${RADIUS_COA_SECRET}
 
 # ── Django ────────────────────────────────────────────────────────────────────
 DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}

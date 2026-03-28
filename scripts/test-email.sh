@@ -17,27 +17,27 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 RECIPIENT="${1:-${ADMIN_EMAIL:-}}"
-SENDER="${2:-}"   # voliteľný – ak prázdny, použije DEFAULT_FROM_EMAIL z Django
+SENDER="${2:-no-reply@${DOMAIN:-salezianipresov.xyz}}"
 
 if [[ -z "$RECIPIENT" ]]; then
   echo "ERROR: Zadaj príjemcu ako argument alebo nastav ADMIN_EMAIL v .env" >&2
-  echo "       Použitie: bash scripts/test-email.sh komu@example.com [od@example.com]" >&2
+  echo "       Použitie: bash scripts/test-email.sh [komu@example.com] [od@example.com]" >&2
   exit 1
 fi
 
 echo "========================================"
-echo " Test emailu → $RECIPIENT"
-[[ -n "$SENDER" ]] && echo " Od       : $SENDER"
+echo " Test emailu"
+echo " Od   : $SENDER"
+echo " Komu : $RECIPIENT"
 echo "========================================"
 echo ""
 
 docker compose -f "$SCRIPT_DIR/../docker-compose.yml" exec backend \
   python manage.py shell -c "
 from django.core.mail import send_mail
-from django.conf import settings
 
 recipient = '$RECIPIENT'
-sender    = '$SENDER' or settings.DEFAULT_FROM_EMAIL
+sender    = '$SENDER'
 
 result = send_mail(
     subject='[wifikeeper] Test emailu',
@@ -48,8 +48,6 @@ result = send_mail(
 )
 print(f'  Od      : {sender}')
 print(f'  Komu    : {recipient}')
-print(f'  SMTP    : {settings.EMAIL_HOST}:{settings.EMAIL_PORT}')
-print(f'  TLS     : {settings.EMAIL_USE_TLS}')
 print(f'  Výsledok: {\"OK – odoslaný\" if result else \"FAIL – email nebol odoslaný\"}')
 "
 
