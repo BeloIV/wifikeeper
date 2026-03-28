@@ -1,0 +1,51 @@
+# UniFi Network Application – spúšťa sa samostatne:
+#   docker compose -f docker-compose.unifi.yml up -d
+#
+# Web UI: https://<server-ip>:8443
+# Pri prvom spustení: Accept certificate → Create new account alebo restore backup
+
+services:
+  unifi-db:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_INITDB_DATABASE: unifi
+    volumes:
+      - unifi_db:/data/db
+      - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    restart: unless-stopped
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Bratislava
+      MONGO_USER: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_PASS: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_HOST: unifi-db
+      MONGO_PORT: 27017
+      MONGO_DBNAME: unifi
+      MONGO_AUTHSOURCE: admin
+    volumes:
+      - unifi_config:/config
+    ports:
+      - "8443:8443"       # Web UI (HTTPS)
+      - "8080:8080"       # AP → controller komunikácia (protokolový port, nemeniť)
+      - "3478:3478/udp"   # STUN
+      - "10001:10001/udp" # AP discovery (L2)
+      - "6789:6789"       # Mobile speed test (voliteľné)
+
+volumes:
+  unifi_db:
+  unifi_config:

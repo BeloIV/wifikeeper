@@ -78,20 +78,8 @@ services:
       FR_LDAP_BASE_DN: ${LDAP_BASE_DN}
       FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN}
       FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
-
-  stalwart:
-    image: stalwartlabs/mail-server:latest
-    restart: always
-    volumes:
-      - stalwart_data:/opt/stalwart
-      - /etc/letsencrypt/live/${DOMAIN}:/opt/stalwart/etc/certs:ro
-    ports:
-      - "25:25"      # SMTP inbound
-      - "587:587"    # SMTP submission
-      - "465:465"    # SMTPS (implicit TLS)
-      - "993:993"    # IMAPS
-    environment:
-      STALWART_ADMIN_PASSWORD: ${STALWART_ADMIN_PASSWORD}
+      RADIUS_SECRET: ${RADIUS_SECRET}
+      RADIUS_CLIENT_NETWORK: ${RADIUS_CLIENT_NETWORK:-0.0.0.0/0}
 
   backend:
     build:
@@ -103,8 +91,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      stalwart:
-        condition: service_started
+
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -117,10 +104,10 @@ services:
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "False"
       ALLOWED_HOSTS: ${DOMAIN}
-      EMAIL_HOST: stalwart
-      EMAIL_PORT: "587"
-      EMAIL_USER: ${STALWART_DJANGO_USER}
-      EMAIL_PASSWORD: ${STALWART_DJANGO_PASSWORD}
+      EMAIL_HOST: smtp-relay.brevo.com
+      EMAIL_PORT: 587
+      EMAIL_USER: ${BREVO_SMTP_USER}
+      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: >
@@ -137,8 +124,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      stalwart:
-        condition: service_started
+
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
@@ -149,13 +135,54 @@ services:
       SECRET_KEY: ${DJANGO_SECRET_KEY}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-      EMAIL_HOST: stalwart
-      EMAIL_PORT: "587"
-      EMAIL_USER: ${STALWART_DJANGO_USER}
-      EMAIL_PASSWORD: ${STALWART_DJANGO_PASSWORD}
+      EMAIL_HOST: smtp-relay.brevo.com
+      EMAIL_PORT: 587
+      EMAIL_USER: ${BREVO_SMTP_USER}
+      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  unifi-db:
+    image: mongo:7
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_INITDB_DATABASE: unifi
+    volumes:
+      - unifi_db:/data/db
+      - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    restart: always
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Bratislava
+      MONGO_USER: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_PASS: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_HOST: unifi-db
+      MONGO_PORT: 27017
+      MONGO_DBNAME: unifi
+      MONGO_AUTHSOURCE: admin
+    volumes:
+      - unifi_config:/config
+    ports:
+      - "8443:8443"       # Web UI (HTTPS)
+      - "8080:8080"       # AP → controller komunikácia (protokolový port, nemeniť)
+      - "3478:3478/udp"   # STUN
+      - "10001:10001/udp" # AP discovery (L2)
+      - "6789:6789"       # Mobile speed test (voliteľné)
 
   certbot:
     image: certbot/dns-cloudflare:latest
@@ -198,4 +225,5 @@ volumes:
   postgres_data:
   ldap_data:
   ldap_config:
-  stalwart_data:
+  unifi_db:
+  unifi_config:

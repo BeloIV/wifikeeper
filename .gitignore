@@ -1,7 +1,10 @@
 # ── Secrets ───────────────────────────────────────────────────
 .env
+.env.backup.*
 certbot/cloudflare.ini
 certs/
+*.pem
+snappymail/data/
 
 # ── Python / Django ───────────────────────────────────────────
 __pycache__/

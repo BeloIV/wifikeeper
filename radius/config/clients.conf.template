@@ -5,8 +5,8 @@
 
 # ── UniFi Access Pointy ───────────────────────────────────────────────────────
 client unifi_aps {
-    ipaddr          = 0.0.0.0/0
-    secret          = bdbc4402fc7f72116899e6f57dfc21ee2b77b83c062ae7a0
+    ipaddr          = ${RADIUS_CLIENT_NETWORK}
+    secret          = ${RADIUS_SECRET}
     shortname       = unifi
     nas_type        = other
     require_message_authenticator = yes
@@ -15,7 +15,7 @@ client unifi_aps {
 # ── Loopback pre testovanie radtest ──────────────────────────────────────────
 client localhost {
     ipaddr          = 127.0.0.1
-    secret          = bdbc4402fc7f72116899e6f57dfc21ee2b77b83c062ae7a0
+    secret          = ${RADIUS_SECRET}
     shortname       = localhost
     nas_type        = other
 }

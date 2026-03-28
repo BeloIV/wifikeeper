@@ -20,6 +20,20 @@ sudo ufw allow 22/tcp comment 'SSH'
 sudo ufw allow 80/tcp comment 'HTTP'
 sudo ufw allow 443/tcp comment 'HTTPS'
 
+# Mail server (Stalwart) - len v produkcii
+# Port 8181 (Admin UI) zámerne NEotvárame navonok - prístup cez Tailscale/VPN
+sudo ufw allow 25/tcp   comment 'SMTP inbound'
+sudo ufw allow 587/tcp  comment 'SMTP submission'
+sudo ufw allow 143/tcp  comment 'IMAP'
+sudo ufw allow 993/tcp  comment 'IMAPS'
+
+# UniFi Network Application
+sudo ufw allow 8443/tcp  comment 'UniFi Web UI (HTTPS)'
+sudo ufw allow 8080/tcp  comment 'UniFi AP → controller'
+sudo ufw allow 3478/udp  comment 'UniFi STUN'
+sudo ufw allow 10001/udp comment 'UniFi AP discovery'
+sudo ufw allow 6789/tcp  comment 'UniFi mobile speed test'
+
 # RADIUS - porty pre UniFi AP-čka
 UNIFI_IP="${CFG_UNIFI_IP:-}"
 if [ -n "$UNIFI_IP" ]; then

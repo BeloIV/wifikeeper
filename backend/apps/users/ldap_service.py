@@ -9,7 +9,7 @@ import hashlib
 import os
 import secrets
 import string
-from ldap3 import Server, Connection, ALL, MODIFY_REPLACE, MODIFY_DELETE, MODIFY_ADD
+from ldap3 import Server, Connection, ALL, NONE, MODIFY_REPLACE, MODIFY_DELETE, MODIFY_ADD
 from ldap3.core.exceptions import LDAPException
 from ldap3.utils.conv import escape_filter_chars
 from django.conf import settings
@@ -19,7 +19,7 @@ GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny']
 
 
 def _conn():
-    server = Server(settings.LDAP_SERVER_URI, get_info=ALL)
+    server = Server(settings.LDAP_SERVER_URI, get_info=NONE)
     conn = Connection(
         server,
         user=settings.LDAP_BIND_DN,
@@ -39,9 +39,10 @@ def _group_dn(group: str) -> str:
 
 def _nt_hash(password: str) -> str:
     """Vypočíta NT hash hesla pre MSCHAPv2 autentifikáciu."""
-    return binascii.hexlify(
-        hashlib.new('md4', password.encode('utf-16-le')).digest()
-    ).decode().upper()
+    from Crypto.Hash import MD4
+    h = MD4.new()
+    h.update(password.encode('utf-16-le'))
+    return binascii.hexlify(h.digest()).decode().upper()
 
 
 def _ssha_hash(password: str) -> str:

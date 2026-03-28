@@ -49,7 +49,7 @@ PROJECT_DIR="$PROJECT_DIR"
 DOMAIN="$DOMAIN"
 
 mkdir -p "\$PROJECT_DIR/certs"
-cp /etc/letsencrypt/live/\$DOMAIN/fullchain.pem \$PROJECT_DIR/certs/server.pem
+cp /etc/letsencrypt/live/\$DOMAIN/fullchain.pem \$PROJECT_DIR/certs/server.crt
 cp /etc/letsencrypt/live/\$DOMAIN/privkey.pem  \$PROJECT_DIR/certs/server.key
 chmod 644 \$PROJECT_DIR/certs/server.pem
 chmod 640 \$PROJECT_DIR/certs/server.key
@@ -62,9 +62,9 @@ echo "Deploy hook vytvorený ✓"
 # --- Prvé skopírovanie certov ---
 echo "Kopírujem certifikáty do projektu..."
 mkdir -p "$PROJECT_DIR/certs"
-sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem "$PROJECT_DIR/certs/server.pem"
+sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem "$PROJECT_DIR/certs/server.crt"
 sudo cp /etc/letsencrypt/live/$DOMAIN/privkey.pem  "$PROJECT_DIR/certs/server.key"
-sudo chmod 644 "$PROJECT_DIR/certs/server.pem"
+sudo chmod 644 "$PROJECT_DIR/certs/server.crt"
 sudo chmod 640 "$PROJECT_DIR/certs/server.key"
 echo "Certifikáty skopírované do $PROJECT_DIR/certs/ ✓"
 

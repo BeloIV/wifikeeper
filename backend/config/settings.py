@@ -155,7 +155,13 @@ EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_HOST_USER = os.environ.get('EMAIL_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
+
+# Don't authenticate if no credentials provided
+if not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD:
+    EMAIL_HOST_USER = None
+    EMAIL_HOST_PASSWORD = None
+
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER', 'wifi@oratko.sk')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@oratko.sk')
 

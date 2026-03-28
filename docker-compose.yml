@@ -43,7 +43,7 @@ services:
     volumes:
       - ldap_data:/var/lib/ldap
       - ldap_config:/etc/ldap/slapd.d
-      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
     ports:
       - "389:389"
 
@@ -72,16 +72,42 @@ services:
       FR_LDAP_BASE_DN: ${LDAP_BASE_DN:-dc=oratko,dc=local}
       FR_LDAP_BIND_DN: cn=readonly,${LDAP_BASE_DN:-dc=oratko,dc=local}
       FR_LDAP_BIND_PASS: ${LDAP_READONLY_PASSWORD}
+      RADIUS_SECRET: ${RADIUS_SECRET}
+      RADIUS_CLIENT_NETWORK: ${RADIUS_CLIENT_NETWORK:-0.0.0.0/0}
 
-  stalwart:
-    image: stalwartlabs/mail-server:latest
-    restart: unless-stopped
+  init:
+    build:
+      context: ./backend
+      target: dev
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
-      - ./stalwart/config.toml:/opt/stalwart/etc/config.toml:ro
-      - stalwart_data:/opt/stalwart
-    ports:
-      - "8025:587"   # SMTP submission (localhost:8025 → Stalwart:587)
-      - "8080:8080"  # Admin UI
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wifimanager}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB:-wifimanager}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-admin}
+      DJANGO_SUPERUSER_EMAIL: ${ADMIN_EMAIL:-admin@salezianipresov.xyz}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+    command:
+      - sh
+      - -c
+      - |
+        python manage.py migrate &&
+        python manage.py shell -c "
+        import os
+        from apps.panel_users.models import AdminUser
+        n = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
+        e = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
+        p = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'admin')
+        if not AdminUser.objects.filter(username=n).exists():
+            AdminUser.objects.create_superuser(n, e, p, role='superadmin')
+            print('Superadmin vytvoreny')
+        else:
+            print('Superadmin uz existuje')
+        "
 
   backend:
     build:
@@ -93,8 +119,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      stalwart:
-        condition: service_started
+
     volumes:
       - ./backend:/app
     environment:
@@ -109,11 +134,11 @@ services:
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "True"
       ALLOWED_HOSTS: "*"
-      EMAIL_HOST: stalwart
-      EMAIL_PORT: "587"
-      EMAIL_USER: ""
-      EMAIL_PASSWORD: ""
-      EMAIL_USE_TLS: "False"
+      EMAIL_HOST: smtp-relay.brevo.com
+      EMAIL_PORT: 587
+      EMAIL_USER: ${BREVO_SMTP_USER}
+      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
+      EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: >
       sh -c "python manage.py migrate &&
@@ -129,8 +154,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      stalwart:
-        condition: service_started
+
     volumes:
       - ./backend:/app
     environment:
@@ -143,11 +167,11 @@ services:
       SECRET_KEY: ${DJANGO_SECRET_KEY}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-      EMAIL_HOST: stalwart
-      EMAIL_PORT: "587"
-      EMAIL_USER: ""
-      EMAIL_PASSWORD: ""
-      EMAIL_USE_TLS: "False"
+      EMAIL_HOST: smtp-relay.brevo.com
+      EMAIL_PORT: 587
+      EMAIL_USER: ${BREVO_SMTP_USER}
+      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
+      EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
@@ -164,6 +188,47 @@ services:
       NEXT_PUBLIC_API_URL: ""
     ports:
       - "3006:3006"
+
+  unifi-db:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_INITDB_DATABASE: unifi
+    volumes:
+      - unifi_db:/data/db
+      - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    restart: unless-stopped
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Bratislava
+      MONGO_USER: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_PASS: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_HOST: unifi-db
+      MONGO_PORT: 27017
+      MONGO_DBNAME: unifi
+      MONGO_AUTHSOURCE: admin
+    volumes:
+      - unifi_config:/config
+    ports:
+      - "8443:8443"       # Web UI (HTTPS)
+      - "8080:8080"       # AP → controller komunikácia (protokolový port, nemeniť)
+      - "3478:3478/udp"   # STUN
+      - "10001:10001/udp" # AP discovery (L2)
+      - "6789:6789"       # Mobile speed test (voliteľné)
 
   nginx:
     image: nginx:1.25-alpine
@@ -182,4 +247,5 @@ volumes:
   postgres_data:
   ldap_data:
   ldap_config:
-  stalwart_data:
+  unifi_db:
+  unifi_config:

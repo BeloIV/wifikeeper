@@ -6,8 +6,8 @@ from apps.panel_users.views import LoginView
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Auth
-    path('api/auth/login', LoginView.as_view(), name='token_obtain'),
-    path('api/auth/refresh', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/login/', LoginView.as_view(), name='token_obtain'),
+    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # API
     re_path(r'^api/users/?', include('apps.users.urls')),
     re_path(r'^api/keys/?', include('apps.keys.urls')),
