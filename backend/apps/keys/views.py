@@ -69,8 +69,11 @@ class TempKeyListView(APIView):
 
         # Vypočítaj expiráciu
         expires_at = None
-        if d['key_type'] == TempKey.KeyType.TIMED and d.get('valid_hours'):
-            expires_at = timezone.now() + timedelta(hours=d['valid_hours'])
+        if d['key_type'] == TempKey.KeyType.TIMED:
+            if d.get('expires_at'):
+                expires_at = d['expires_at']
+            elif d.get('valid_hours'):
+                expires_at = timezone.now() + timedelta(hours=d['valid_hours'])
 
         key = TempKey.objects.create(
             label=d.get('label', ''),

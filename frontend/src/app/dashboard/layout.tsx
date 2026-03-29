@@ -8,6 +8,7 @@ import { api, logout, type User } from '@/lib/api'
 const NAV = [
   { href: '/dashboard', label: 'Prehľad', icon: '🏠' },
   { href: '/dashboard/users', label: 'Používatelia', icon: '👥' },
+  { href: '/dashboard/groups', label: 'Skupiny', icon: '🏷️' },
   { href: '/dashboard/keys', label: 'Kľúče', icon: '🔑' },
   { href: '/dashboard/live', label: 'Live', icon: '📡' },
   { href: '/dashboard/history', label: 'História', icon: '📋' },
@@ -124,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Bottom nav – mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex z-40">
-        {NAV.slice(0, 5).map((item) => {
+        {NAV.slice(0, 6).map((item) => {
           const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
           return (
             <Link

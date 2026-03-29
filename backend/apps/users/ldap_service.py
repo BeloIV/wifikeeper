@@ -17,6 +17,24 @@ from django.conf import settings
 
 GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny']
 
+VLAN_MAP = {
+    'sdb': 10,
+    'animatori': 20,
+    'fma': 20,
+    'spolupracovnici': 30,
+    'hostia': 40,
+    'docasny': 40,
+}
+
+GROUP_LABELS = {
+    'sdb': 'SDB',
+    'animatori': 'Animátori',
+    'fma': 'FMA',
+    'spolupracovnici': 'Spolupracovníci',
+    'hostia': 'Hostia',
+    'docasny': 'Dočasný',
+}
+
 
 def _conn():
     server = Server(settings.LDAP_SERVER_URI, get_info=NONE)
@@ -236,7 +254,24 @@ def _remove_from_group(username: str, group: str, conn=None):
         conn.unbind()
 
 
+def get_next_group_id(group: str) -> int:
+    """
+    Vráti ďalšie voľné poradové číslo pre skupinu.
+    Prechádza sn (priezvisko) všetkých členov skupiny, hľadá max číslo.
+    """
+    users = list_users()
+    max_id = 0
+    for u in users:
+        if u.get('group') == group:
+            sn = u.get('last_name', '')
+            if sn.isdigit():
+                max_id = max(max_id, int(sn))
+    return max_id + 1
+
+
 def generate_temp_username(prefix: str = 'guest') -> str:
     """Vygeneruje unikátne meno pre dočasného používateľa."""
     suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
     return f'{prefix}_{suffix}'
+
+

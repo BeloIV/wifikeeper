@@ -31,11 +31,27 @@ class TempKeyCreateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
     key_type = serializers.ChoiceField(choices=TempKey.KeyType.choices)
     valid_hours = serializers.IntegerField(min_value=1, max_value=720, required=False, allow_null=True)
+    expires_at = serializers.DateTimeField(required=False, allow_null=True)
     email = serializers.EmailField(required=False, allow_blank=True)
 
     def validate(self, data):
-        if data['key_type'] == TempKey.KeyType.TIMED and not data.get('valid_hours'):
-            raise serializers.ValidationError({'valid_hours': 'Zadaj platnosť v hodinách pre časový kľúč.'})
+        if data['key_type'] == TempKey.KeyType.TIMED:
+            has_hours = bool(data.get('valid_hours'))
+            has_dt = bool(data.get('expires_at'))
+            if has_hours and has_dt:
+                raise serializers.ValidationError(
+                    'Zadaj buď valid_hours alebo expires_at, nie obe súčasne.'
+                )
+            if not has_hours and not has_dt:
+                raise serializers.ValidationError(
+                    {'valid_hours': 'Zadaj platnosť v hodinách alebo konkrétny dátum expirácie.'}
+                )
+            if has_dt:
+                from django.utils import timezone
+                if data['expires_at'] <= timezone.now():
+                    raise serializers.ValidationError(
+                        {'expires_at': 'Dátum expirácie musí byť v budúcnosti.'}
+                    )
         return data
 
 

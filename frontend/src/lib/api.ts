@@ -147,3 +147,25 @@ export const ROLE_LABELS: Record<string, string> = {
   admin: 'Admin',
   readonly: 'Len čítanie',
 }
+
+export type BulkUserResult = {
+  index: number
+  success: boolean
+  email: string
+  username?: string
+  error?: string
+}
+
+export type BulkCreateResponse = {
+  results: BulkUserResult[]
+  created: number
+  failed: number
+}
+
+export type GroupInfo = {
+  name: string
+  label: string
+  vlan: number
+  member_count: number
+  members: LDAPUser[]
+}

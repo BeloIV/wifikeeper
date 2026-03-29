@@ -35,3 +35,12 @@ class UpdateLDAPUserSerializer(serializers.Serializer):
 
 class ChangePasswordSerializer(serializers.Serializer):
     password = serializers.CharField(min_length=8, write_only=True)
+
+
+class BulkEmailImportSerializer(serializers.Serializer):
+    emails = serializers.ListField(
+        child=serializers.EmailField(),
+        min_length=1,
+        max_length=100,
+    )
+    group = serializers.ChoiceField(choices=GROUPS)

@@ -137,8 +137,10 @@ def send_key_email(key_id: str, recipient_email: str):
 
     if key.key_type == TempKey.KeyType.ONE_TIME:
         validity_text = 'jednorazový (platný na jedno prihlásenie)'
-    else:
+    elif key.valid_hours:
         validity_text = f'časový (platný {key.valid_hours} hodín do {key.expires_at.strftime("%d.%m.%Y %H:%M")})'
+    else:
+        validity_text = f'časový (platný do {key.expires_at.strftime("%d.%m.%Y %H:%M")})'
 
     message = (
         f'Dobrý deň,\n\n'

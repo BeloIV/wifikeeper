@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     # Lokálne aplikácie
     'apps.panel_users',
     'apps.keys',
+    'apps.users',
     'apps.sessions',
     'apps.audit',
 ]
@@ -149,20 +150,15 @@ CORS_ALLOWED_ORIGINS = os.environ.get(
 ).split(',')
 CORS_ALLOW_CREDENTIALS = True
 
-# ── Email ──────────────────────────────────────────────────────────────────────
+# ── Email (Brevo SMTP relay) ───────────────────────────────────────────────────
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp-relay.brevo.com')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
 EMAIL_HOST_USER = os.environ.get('EMAIL_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_PASSWORD', '')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False') == 'True'
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 
-# Don't authenticate if no credentials provided
-if not EMAIL_HOST_USER or not EMAIL_HOST_PASSWORD:
-    EMAIL_HOST_USER = None
-    EMAIL_HOST_PASSWORD = None
-
-DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_USER', 'wifi@oratko.sk')
+DEFAULT_FROM_EMAIL = os.environ.get('MAIL_FROM', 'no-reply@oratko.sk')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@oratko.sk')
 
 # ── Statické súbory ────────────────────────────────────────────────────────────

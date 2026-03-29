@@ -13,7 +13,9 @@ export default function KeysPage() {
   const [form, setForm] = useState({
     label: '',
     key_type: 'timed' as 'one_time' | 'timed',
+    expiry_mode: 'hours' as 'hours' | 'datetime',
     valid_hours: 24,
+    expires_at: '',
     email: '',
   })
   const [saving, setSaving] = useState(false)
@@ -37,7 +39,13 @@ export default function KeysPage() {
         key_type: form.key_type,
         email: form.email,
       }
-      if (form.key_type === 'timed') body.valid_hours = form.valid_hours
+      if (form.key_type === 'timed') {
+        if (form.expiry_mode === 'datetime' && form.expires_at) {
+          body.expires_at = new Date(form.expires_at).toISOString()
+        } else {
+          body.valid_hours = form.valid_hours
+        }
+      }
       const created = await api.post<TempKey>('/keys/', body)
       setNewKey(created)
       setShowCreate(false)
@@ -103,7 +111,11 @@ export default function KeysPage() {
                           ? 'bg-purple-100 text-purple-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
-                        {key.key_type === 'one_time' ? 'Jednorazový' : `${key.valid_hours}h`}
+                        {key.key_type === 'one_time'
+                          ? 'Jednorazový'
+                          : key.valid_hours
+                            ? `${key.valid_hours}h`
+                            : `do ${formatDate(key.expires_at)}`}
                       </span>
                       {key.used && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">použitý</span>}
                       {key.is_expired && !key.used && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">expirovaný</span>}
@@ -178,21 +190,72 @@ export default function KeysPage() {
               </div>
             </Field>
             {form.key_type === 'timed' && (
-              <Field label="Platnosť (hodiny)">
-                <div className="flex gap-2">
-                  {[2, 8, 24, 48, 168].map((h) => (
-                    <button
-                      key={h}
-                      onClick={() => setForm({ ...form, valid_hours: h })}
-                      className={`flex-1 py-1.5 text-xs rounded-lg border ${
-                        form.valid_hours === h ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                      }`}
-                    >
-                      {h}h
-                    </button>
-                  ))}
-                </div>
-              </Field>
+              <>
+                <Field label="Spôsob expirácie">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer ${
+                      form.expiry_mode === 'hours' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    }`}>
+                      <input
+                        type="radio"
+                        checked={form.expiry_mode === 'hours'}
+                        onChange={() => setForm({ ...form, expiry_mode: 'hours' })}
+                        className="sr-only"
+                      />
+                      <div>
+                        <div className="text-xs font-medium">Za N hodín</div>
+                        <div className="text-xs text-gray-400">relatívne</div>
+                      </div>
+                    </label>
+                    <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer ${
+                      form.expiry_mode === 'datetime' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    }`}>
+                      <input
+                        type="radio"
+                        checked={form.expiry_mode === 'datetime'}
+                        onChange={() => setForm({ ...form, expiry_mode: 'datetime' })}
+                        className="sr-only"
+                      />
+                      <div>
+                        <div className="text-xs font-medium">Dátum a čas</div>
+                        <div className="text-xs text-gray-400">absolútne</div>
+                      </div>
+                    </label>
+                  </div>
+                </Field>
+                {form.expiry_mode === 'hours' ? (
+                  <Field label="Platnosť (hodiny)">
+                    <div className="flex gap-2">
+                      {[2, 8, 24, 48, 168].map((h) => (
+                        <button
+                          key={h}
+                          onClick={() => setForm({ ...form, valid_hours: h })}
+                          className={`flex-1 py-1.5 text-xs rounded-lg border ${
+                            form.valid_hours === h ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {h}h
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                ) : (
+                  <Field label="Platný do">
+                    <input
+                      type="datetime-local"
+                      value={form.expires_at}
+                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                      onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
+                      className="input"
+                    />
+                    {form.expires_at && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Expiruje: {formatDate(new Date(form.expires_at).toISOString())}
+                      </p>
+                    )}
+                  </Field>
+                )}
+              </>
             )}
             <Field label="Email hosťa (voliteľné)">
               <input

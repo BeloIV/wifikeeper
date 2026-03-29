@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api, type LDAPUser, GROUP_LABELS, GROUPS } from '@/lib/api'
+import { api, type LDAPUser, type BulkCreateResponse, GROUP_LABELS, GROUPS } from '@/lib/api'
 
 type FormData = {
   username: string
@@ -28,6 +28,12 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<LDAPUser | null>(null)
   const [changePassUser, setChangePassUser] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
+  const [showBulk, setShowBulk] = useState(false)
+  const [bulkPhase, setBulkPhase] = useState<'input' | 'results'>('input')
+  const [bulkEmails, setBulkEmails] = useState('')
+  const [bulkGroup, setBulkGroup] = useState('animatori')
+  const [bulkResult, setBulkResult] = useState<BulkCreateResponse | null>(null)
+  const [bulkSaving, setBulkSaving] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -65,6 +71,35 @@ export default function UsersPage() {
     load()
   }
 
+  function parsedEmails() {
+    return bulkEmails
+      .split(/[\n,;]+/)
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => e.includes('@'))
+  }
+
+  async function submitBulk() {
+    const emails = parsedEmails()
+    if (emails.length === 0) return
+    setBulkSaving(true)
+    try {
+      const result = await api.post<BulkCreateResponse>('/users/bulk/', { emails, group: bulkGroup })
+      setBulkResult(result)
+      setBulkPhase('results')
+      if (result.created > 0) load()
+    } finally {
+      setBulkSaving(false)
+    }
+  }
+
+  function closeBulk() {
+    setShowBulk(false)
+    setBulkPhase('input')
+    setBulkEmails('')
+    setBulkGroup('animatori')
+    setBulkResult(null)
+  }
+
   async function changePassword() {
     if (!changePassUser || newPassword.length < 8) return
     await api.post(`/users/${changePassUser}/password/`, { password: newPassword })
@@ -76,12 +111,20 @@ export default function UsersPage() {
     <div className="space-y-4 max-w-5xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-xl font-bold text-gray-900">Používatelia</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Nový používateľ
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowBulk(true)}
+            className="border border-gray-200 text-gray-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Hromadný import
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + Nový používateľ
+          </button>
+        </div>
       </div>
 
       {/* Filtre */}
@@ -208,6 +251,95 @@ export default function UsersPage() {
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* Modal – hromadný import */}
+      {showBulk && (
+        <Modal
+          title={bulkPhase === 'input' ? 'Hromadný import používateľov' : 'Výsledky importu'}
+          onClose={closeBulk}
+        >
+          {bulkPhase === 'input' ? (
+            <div className="space-y-4">
+              <Field label="Emailové adresy (každá na nový riadok alebo oddelené čiarkou)">
+                <textarea
+                  value={bulkEmails}
+                  onChange={(e) => setBulkEmails(e.target.value)}
+                  className="input min-h-32 resize-y font-mono text-xs"
+                  placeholder={'jan@example.sk\nanna@example.sk\npeter@example.sk'}
+                />
+                {parsedEmails().length > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">{parsedEmails().length} emailov</p>
+                )}
+              </Field>
+              <Field label="Skupina (pre všetkých)">
+                <select
+                  value={bulkGroup}
+                  onChange={(e) => setBulkGroup(e.target.value)}
+                  className="input"
+                >
+                  {GROUPS.map((g) => (
+                    <option key={g} value={g}>{GROUP_LABELS[g]}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 space-y-1">
+                <div>Login = emailová adresa</div>
+                <div>Meno = názov skupiny · Priezvisko = poradové číslo</div>
+                <div>Heslo (8 znakov) sa automaticky odošle na každý email</div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={submitBulk}
+                  disabled={bulkSaving || parsedEmails().length === 0}
+                  className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {bulkSaving
+                    ? 'Vytváram...'
+                    : `Vytvoriť ${parsedEmails().length} používateľov`}
+                </button>
+                <button onClick={closeBulk} className="px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                  Zrušiť
+                </button>
+              </div>
+            </div>
+          ) : bulkResult ? (
+            <div className="space-y-3">
+              <div className="flex gap-3 text-sm">
+                <span className="text-green-600 font-medium">✓ Vytvorených: {bulkResult.created}</span>
+                {bulkResult.failed > 0 && (
+                  <span className="text-red-500 font-medium">✗ Zlyhalo: {bulkResult.failed}</span>
+                )}
+              </div>
+              {bulkResult.created > 0 && (
+                <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
+                  Heslo bolo odoslané na každý email.
+                </p>
+              )}
+              <div className="max-h-64 overflow-y-auto space-y-1">
+                {bulkResult.results.map((r) => (
+                  <div key={r.index} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${r.success ? 'bg-green-50' : 'bg-red-50'}`}>
+                    {r.success ? (
+                      <>
+                        <span className="text-green-600 flex-shrink-0">✓</span>
+                        <span className="font-mono text-gray-700">{r.email}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-red-500 flex-shrink-0">✗</span>
+                        <span className="text-gray-600 font-mono">{r.email}</span>
+                        <span className="text-red-500 truncate">{r.error}</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={closeBulk} className="w-full bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700">
+                Hotovo
+              </button>
+            </div>
+          ) : null}
         </Modal>
       )}
 
