@@ -89,6 +89,60 @@ def cleanup_expired_keys_safe():
 
 
 @shared_task
+def process_key_usage():
+    """
+    Kontroluje radius_postauth pre nové úspešné prihlásenia temp key používateľov.
+    Pre ONE_TIME: označí ako použitý po 1. prihlásení.
+    Pre MULTI_USE: inkrementuje use_count, označí ako použitý keď dosiahne max_uses.
+    Cleanup task potom zmaže LDAP + radreply.
+    """
+    from .models import TempKey
+    from django.db import connection
+
+    active_keys = TempKey.objects.filter(
+        ldap_deleted=False,
+        used=False,
+        key_type__in=[TempKey.KeyType.ONE_TIME, TempKey.KeyType.MULTI_USE],
+    )
+    if not active_keys.exists():
+        return 0
+
+    usernames = list(active_keys.values_list('ldap_username', flat=True))
+    placeholders = ','.join(['%s'] * len(usernames))
+
+    with connection.cursor() as cur:
+        cur.execute(
+            f"SELECT username, COUNT(*) FROM radius_postauth "
+            f"WHERE username IN ({placeholders}) AND reply = 'Access-Accept' "
+            f"GROUP BY username",
+            usernames,
+        )
+        counts = {row[0]: row[1] for row in cur.fetchall()}
+
+    updated = 0
+    for key in active_keys:
+        total = counts.get(key.ldap_username, 0)
+        if total == 0:
+            continue
+
+        if key.key_type == TempKey.KeyType.ONE_TIME:
+            key.used = True
+            key.used_at = timezone.now()
+            key.save(update_fields=['used', 'used_at'])
+            updated += 1
+
+        elif key.key_type == TempKey.KeyType.MULTI_USE:
+            key.use_count = total
+            if key.max_uses and total >= key.max_uses:
+                key.used = True
+                key.used_at = timezone.now()
+            key.save(update_fields=['use_count', 'used', 'used_at'])
+            updated += 1
+
+    return updated
+
+
+@shared_task
 def notify_expiring_keys():
     """Pošle email adminovi o kľúčoch expirujúcich o menej ako 1 hodinu."""
     from .models import TempKey

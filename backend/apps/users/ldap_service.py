@@ -205,14 +205,26 @@ def delete_user(username: str):
 
 
 def set_active(username: str, active: bool):
-    """Aktivuje alebo deaktivuje účet (pwdAccountLockedTime)."""
+    """Aktivuje alebo deaktivuje účet (pwdAccountLockedTime + radreply)."""
     conn = _conn()
     dn = _user_dn(username)
     if active:
         conn.modify(dn, {'pwdAccountLockedTime': [(MODIFY_DELETE, [])]})
+        conn.unbind()
+        # Obnov VLAN — zisti skupinu a zapíš radreply
+        group = get_user_group(username)
+        if group:
+            vlan_map = get_vlan_map()
+            vlan = vlan_map.get(group)
+            if vlan is not None:
+                _set_radreply_vlan(username, vlan)
     else:
         conn.modify(dn, {'pwdAccountLockedTime': [(MODIFY_REPLACE, ['000001010000Z'])]})
-    conn.unbind()
+        conn.unbind()
+        # Zablokuj RADIUS prístup — vymaž radreply
+        from django.db import connection as db
+        with db.cursor() as cur:
+            cur.execute("DELETE FROM radreply WHERE username = %s", [username])
 
 
 def get_user_group(username: str) -> str | None:
