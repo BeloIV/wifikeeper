@@ -31,6 +31,5 @@ sql {
         idle_timeout = 60
     }
 
-    # Cesty k SQL dotazom
-    query_file = "${modconfdir}/${.:name}/postgresql/queries.conf"
+    $INCLUDE ${modconfdir}/${.:name}/main/postgresql/queries.conf
 }
