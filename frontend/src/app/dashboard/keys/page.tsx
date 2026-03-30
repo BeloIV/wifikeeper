@@ -34,7 +34,7 @@ export default function KeysPage() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    api.get<GroupInfo[]>('/groups/').then((data) => {
+    api.get<GroupInfo[]>('/users/groups/').then((data) => {
       setGroups(data)
       if (data.length > 0) setForm((f) => ({ ...f, group: f.group || data[0].name }))
     })
