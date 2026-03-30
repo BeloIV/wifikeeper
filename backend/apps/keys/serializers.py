@@ -32,7 +32,7 @@ class TempKeyCreateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
     group = serializers.CharField(max_length=64)
     key_type = serializers.ChoiceField(choices=TempKey.KeyType.choices)
-    valid_hours = serializers.IntegerField(min_value=1, max_value=720, required=False, allow_null=True)
+    valid_hours = serializers.FloatField(min_value=0.016, max_value=8760, required=False, allow_null=True)
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
     max_uses = serializers.IntegerField(min_value=1, max_value=1000, required=False, allow_null=True)
     email = serializers.EmailField(required=False, allow_blank=True)

@@ -34,13 +34,5 @@ class KeysConfig(AppConfig):
                     'args': json.dumps([]),
                 }
             )
-            PeriodicTask.objects.get_or_create(
-                name='Process key usage (one-time / multi-use)',
-                defaults={
-                    'task': 'apps.keys.tasks.process_key_usage',
-                    'interval': every5,
-                    'args': json.dumps([]),
-                }
-            )
         except Exception:
             pass

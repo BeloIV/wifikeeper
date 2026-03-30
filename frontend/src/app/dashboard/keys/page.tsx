@@ -17,7 +17,10 @@ export default function KeysPage() {
     key_type: 'multi_use' as 'timed' | 'multi_use',
     expiry_mode: 'hours' as 'hours' | 'datetime',
     valid_hours: 24,
-    expires_at: '',
+    duration_unit: 'h' as 'h' | 'min',
+    duration_value: 24,
+    expires_date: '',
+    expires_time: (() => { const d = new Date(Date.now() + 3600000); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` })(),
     max_uses: 1,
     email: '',
   })
@@ -51,10 +54,15 @@ export default function KeysPage() {
         email: form.email,
       }
       if (form.key_type === 'timed') {
-        if (form.expiry_mode === 'datetime' && form.expires_at) {
-          body.expires_at = new Date(form.expires_at).toISOString()
+        if (form.expiry_mode === 'datetime') {
+          if (!form.expires_date) { setError('Zadaj dátum expirácie.'); setSaving(false); return }
+          const dt = new Date(`${form.expires_date}T${form.expires_time}:00`)
+          if (isNaN(dt.getTime()) || dt <= new Date()) { setError('Dátum expirácie musí byť v budúcnosti.'); setSaving(false); return }
+          body.expires_at = dt.toISOString()
         } else {
-          body.valid_hours = form.valid_hours
+          body.valid_hours = form.duration_unit === 'min'
+            ? form.duration_value / 60
+            : form.duration_value
         }
       }
       if (form.key_type === 'multi_use') {
@@ -254,35 +262,82 @@ export default function KeysPage() {
                   </div>
                 </Field>
                 {form.expiry_mode === 'hours' ? (
-                  <Field label="Platnosť (hodiny)">
+                  <Field label="Platnosť">
                     <div className="flex gap-2">
-                      {[2, 8, 24, 48, 168].map((h) => (
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
                         <button
-                          key={h}
-                          onClick={() => setForm({ ...form, valid_hours: h })}
-                          className={`flex-1 py-1.5 text-xs rounded-lg border ${
-                            form.valid_hours === h ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
-                          }`}
-                        >
-                          {h}h
-                        </button>
-                      ))}
+                          onClick={() => setForm({ ...form, duration_unit: 'min', duration_value: form.duration_unit === 'h' ? form.duration_value * 60 : form.duration_value })}
+                          className={`px-3 py-2 ${form.duration_unit === 'min' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >min</button>
+                        <button
+                          onClick={() => setForm({ ...form, duration_unit: 'h', duration_value: form.duration_unit === 'min' ? Math.max(1, Math.round(form.duration_value / 60)) : form.duration_value })}
+                          className={`px-3 py-2 ${form.duration_unit === 'h' ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >hod</button>
+                      </div>
+                      <input
+                        type="number"
+                        min={1}
+                        value={form.duration_value}
+                        onChange={(e) => setForm({ ...form, duration_value: parseInt(e.target.value) || 1 })}
+                        className="input w-20 text-center"
+                      />
+                      <div className="flex gap-1">
+                        {(form.duration_unit === 'min' ? [5, 15, 30] : [1, 2, 8, 24]).map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setForm({ ...form, duration_value: v })}
+                            className={`px-2.5 py-1.5 text-xs rounded-lg border ${
+                              form.duration_value === v ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'
+                            }`}
+                          >
+                            {v}{form.duration_unit === 'min' ? 'min' : 'h'}
+                          </button>
+                        ))}
+                      </div>
                     </div>
+                    {((form.duration_unit === 'h' && form.duration_value > 24) ||
+                      (form.duration_unit === 'min' && form.duration_value > 1440)) && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Pre dlhšie ako 24h použi možnosť „Dátum a čas".
+                      </p>
+                    )}
                   </Field>
                 ) : (
                   <Field label="Platný do">
-                    <input
-                      type="datetime-local"
-                      value={form.expires_at}
-                      min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
-                      onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
-                      className="input"
-                    />
-                    {form.expires_at && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        Expiruje: {formatDate(new Date(form.expires_at).toISOString())}
-                      </p>
-                    )}
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={form.expires_date}
+                        onChange={(e) => { setError(''); setForm({ ...form, expires_date: e.target.value }) }}
+                        className="input flex-1"
+                      />
+                      <input
+                        type="time"
+                        value={form.expires_time}
+                        onChange={(e) => { setError(''); setForm({ ...form, expires_time: e.target.value }) }}
+                        className="input w-28"
+                      />
+                    </div>
+                    {(() => {
+                      if (!form.expires_date) return null
+                      const dt = new Date(`${form.expires_date}T${form.expires_time}:00`)
+                      const diffMs = dt.getTime() - Date.now()
+                      if (isNaN(dt.getTime())) return (
+                        <p className="text-xs text-red-500 mt-1">Neplatný formát času.</p>
+                      )
+                      if (diffMs <= 0) return (
+                        <p className="text-xs text-red-500 mt-1">Čas je v minulosti.</p>
+                      )
+                      const diffMin = Math.round(diffMs / 60000)
+                      const label = diffMin < 60
+                        ? `za ${diffMin} min`
+                        : diffMin < 1440
+                          ? `za ${Math.round(diffMin / 60)} hod`
+                          : `za ${Math.round(diffMin / 1440)} dní`
+                      return (
+                        <p className="text-xs text-gray-400 mt-1">Expiruje {label} · {formatDate(dt.toISOString())}</p>
+                      )
+                    })()}
                   </Field>
                 )}
               </>

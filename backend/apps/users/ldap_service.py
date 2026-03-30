@@ -15,11 +15,12 @@ from ldap3.utils.conv import escape_filter_chars
 from django.conf import settings
 
 
-_FALLBACK_GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny']
-_FALLBACK_VLAN = {'sdb': 10, 'animatori': 20, 'fma': 20, 'spolupracovnici': 30, 'hostia': 40, 'docasny': 40}
+_FALLBACK_GROUPS = ['animatori', 'spolupracovnici', 'hostia', 'premietaci', 'bar', 'kaviaren', 'zbor', 'treneri', 'mediatim']
+_FALLBACK_VLAN = {'animatori': 20, 'spolupracovnici': 30, 'hostia': 40, 'premietaci': 20, 'bar': 20, 'kaviaren': 20, 'zbor': 20, 'treneri': 20, 'mediatim': 20}
 _FALLBACK_LABELS = {
-    'sdb': 'SDB', 'animatori': 'Animátori', 'fma': 'FMA',
-    'spolupracovnici': 'Spolupracovníci', 'hostia': 'Hostia', 'docasny': 'Dočasný',
+    'animatori': 'Animátori', 'spolupracovnici': 'Spolupracovníci', 'hostia': 'Hostia',
+    'premietaci': 'Premietanie', 'bar': 'Bar', 'kaviaren': 'Kaviareň',
+    'zbor': 'Zbor', 'treneri': 'Tréneri', 'mediatim': 'Mediálny tím',
 }
 
 

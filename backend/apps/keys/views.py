@@ -86,6 +86,11 @@ class TempKeyListView(APIView):
             created_by=request.user,
         )
 
+        # Pre časový kľúč naplánuj presný čas expirácie
+        if key.key_type == TempKey.KeyType.TIMED and key.expires_at:
+            from .tasks import expire_temp_key
+            expire_temp_key.apply_async(args=[str(key.id)], eta=key.expires_at)
+
         # Pošli email ak zadaný
         email = d.get('email', '').strip()
         if email:

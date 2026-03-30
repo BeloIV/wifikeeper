@@ -88,58 +88,89 @@ def cleanup_expired_keys_safe():
     return cleaned
 
 
-@shared_task
-def process_key_usage():
+
+def _coa_disconnect_user(username: str) -> int:
+    """Odošle CoA Disconnect-Request pre všetky aktívne RADIUS sessions daného používateľa."""
+    import re
+    import subprocess
+    from django.conf import settings
+    from apps.sessions.models import RadiusSession
+
+    secret = settings.RADIUS_COA_SECRET
+    sessions = RadiusSession.objects.filter(
+        username=username,
+        acct_stop_time__isnull=True,
+    )
+
+    disconnected = 0
+    for session in sessions:
+        nas_ip = str(session.nas_ip_address)
+        if not re.fullmatch(r'[A-Fa-f0-9\-]{8,64}', session.acct_session_id):
+            logger.warning(f'CoA: neplatný acct_session_id pre {username}, preskakujem')
+            continue
+        cmd = ['radclient', '-x', f'{nas_ip}:3799', 'disconnect', secret]
+        input_data = (
+            f'Acct-Session-Id = {session.acct_session_id}\n'
+            f'User-Name = {username}\n'
+            f'NAS-IP-Address = {nas_ip}\n'
+        )
+        try:
+            result = subprocess.run(cmd, input=input_data, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                disconnected += 1
+                logger.info(f'CoA: odpojený {username} zo {nas_ip}')
+            else:
+                logger.warning(f'CoA zlyhalo pre {username} na {nas_ip}: {result.stderr.strip()}')
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.warning(f'CoA výnimka pre {username} na {nas_ip}: {e}')
+
+    return disconnected
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def expire_temp_key(self, key_id: str):
     """
-    Kontroluje radius_postauth pre nové úspešné prihlásenia temp key používateľov.
-    Pre ONE_TIME: označí ako použitý po 1. prihlásení.
-    Pre MULTI_USE: inkrementuje use_count, označí ako použitý keď dosiahne max_uses.
-    Cleanup task potom zmaže LDAP + radreply.
+    Spúšťa sa presne v čase expirácie časového kľúča (apply_async eta=expires_at).
+    1. Vymaže radreply → RADIUS odmietne nové autentifikácie okamžite
+    2. Odošle CoA Disconnect-Request pre všetky aktívne sessions
+    3. Vymaže LDAP účet a označí kľúč ako použitý
     """
     from .models import TempKey
+    from apps.users import ldap_service as ldap
     from django.db import connection
 
-    active_keys = TempKey.objects.filter(
-        ldap_deleted=False,
-        used=False,
-        key_type__in=[TempKey.KeyType.ONE_TIME, TempKey.KeyType.MULTI_USE],
-    )
-    if not active_keys.exists():
-        return 0
+    try:
+        key = TempKey.objects.get(id=key_id)
+    except TempKey.DoesNotExist:
+        return
 
-    usernames = list(active_keys.values_list('ldap_username', flat=True))
-    placeholders = ','.join(['%s'] * len(usernames))
+    if key.ldap_deleted:
+        return
 
+    username = key.ldap_username
+
+    # 1. Vymaž radreply – nové pokusy o autentifikáciu budú odmietnuté
     with connection.cursor() as cur:
-        cur.execute(
-            f"SELECT username, COUNT(*) FROM radius_postauth "
-            f"WHERE username IN ({placeholders}) AND reply = 'Access-Accept' "
-            f"GROUP BY username",
-            usernames,
-        )
-        counts = {row[0]: row[1] for row in cur.fetchall()}
+        cur.execute('DELETE FROM radreply WHERE username = %s', [username])
 
-    updated = 0
-    for key in active_keys:
-        total = counts.get(key.ldap_username, 0)
-        if total == 0:
-            continue
+    # 2. Odpoj všetkých aktuálne pripojených
+    _coa_disconnect_user(username)
 
-        if key.key_type == TempKey.KeyType.ONE_TIME:
+    # 3. Vymaž LDAP účet
+    try:
+        if ldap.get_user(username):
+            ldap.delete_user(username)
+        update_fields = ['ldap_deleted']
+        key.ldap_deleted = True
+        if not key.used:
             key.used = True
             key.used_at = timezone.now()
-            key.save(update_fields=['used', 'used_at'])
-            updated += 1
-
-        elif key.key_type == TempKey.KeyType.MULTI_USE:
-            key.use_count = total
-            if key.max_uses and total >= key.max_uses:
-                key.used = True
-                key.used_at = timezone.now()
-            key.save(update_fields=['use_count', 'used', 'used_at'])
-            updated += 1
-
-    return updated
+            update_fields += ['used', 'used_at']
+        key.save(update_fields=update_fields)
+        logger.info(f'expire_temp_key: kľúč {username} expiroval a bol zmazaný')
+    except Exception as exc:
+        logger.error(f'expire_temp_key: chyba LDAP pre {username}: {exc}')
+        raise self.retry(exc=exc)
 
 
 @shared_task
