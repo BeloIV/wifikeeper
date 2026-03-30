@@ -13,6 +13,7 @@ class TempKey(models.Model):
     class KeyType(models.TextChoices):
         ONE_TIME = 'one_time', 'Jednorazový'
         TIMED = 'timed', 'Časový'
+        MULTI_USE = 'multi_use', 'N-násobný'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     label = models.CharField(max_length=200, blank=True, verbose_name='Popis / meno hosťa')
@@ -29,8 +30,14 @@ class TempKey(models.Model):
         help_text='Len pre časový typ. Null = ručne definovaná expirácia.',
     )
     expires_at = models.DateTimeField(null=True, blank=True, verbose_name='Expiruje')
-    used = models.BooleanField(default=False, verbose_name='Použitý')
-    used_at = models.DateTimeField(null=True, blank=True, verbose_name='Čas použitia')
+    used = models.BooleanField(default=False, verbose_name='Použitý / vyčerpaný')
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name='Čas posledného použitia')
+    max_uses = models.PositiveIntegerField(
+        null=True, blank=True,
+        verbose_name='Max. počet použití',
+        help_text='Len pre N-násobný typ.',
+    )
+    use_count = models.PositiveIntegerField(default=0, verbose_name='Počet použití')
 
     # Metadata
     created_by = models.ForeignKey(
@@ -60,4 +67,8 @@ class TempKey(models.Model):
 
     @property
     def is_active(self):
-        return not self.used and not self.is_expired and not self.ldap_deleted
+        if self.ldap_deleted:
+            return False
+        if self.key_type == self.KeyType.MULTI_USE:
+            return not self.used and (self.max_uses is None or self.use_count < self.max_uses)
+        return not self.used and not self.is_expired

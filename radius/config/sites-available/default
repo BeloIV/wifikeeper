@@ -65,12 +65,9 @@ server default {
         attr_filter.accounting_response
     }
 
-    # ── Post-Auth: VLAN priradenie + accounting ───────────────────────────────
+    # ── Post-Auth: VLAN + accounting ─────────────────────────────────────────
     post-auth {
-        # Prirad VLAN podľa LDAP skupiny
         vlan_policy
-
-        # Zaloguj úspešné autentifikácie
         sql
 
         Post-Auth-Type REJECT {

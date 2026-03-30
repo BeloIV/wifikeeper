@@ -1,66 +1,22 @@
-policy {
+# VLAN policy — číta VLAN z radreply tabuľky (zapísanej Djangom pri set_user_group)
+# Žiaden reštart FreeRADIUS nie je potrebný po zmene skupiny.
 
-    # ── VLAN priradenie podľa LDAP skupiny ────────────────────────────────────
-    # Skupiny a VLAN:
-    #   sdb            → VLAN 10  (SDB – pre poriadok, primárne WPA2 Personal)
-    #   animatori      → VLAN 20  (Oratko SSID)
-    #   fma            → VLAN 20  (Oratko SSID)
-    #   spolupracovnici→ VLAN 30  (Oratko SSID)
-    #   hostia         → VLAN 40  (Oratko SSID)
-    #   docasny        → VLAN 40  (Oratko SSID – jednorazové/časové kľúče)
+vlan_policy {
+    update control {
+        &Tmp-String-0 := "%{sql:SELECT value FROM radreply WHERE username = '%{User-Name}' AND attribute = 'Tunnel-Private-Group-Id' LIMIT 1}"
+    }
 
-    vlan_policy {
-        # Nastaví Tunnel atribúty pre IEEE 802.1Q VLAN tagging
-        # Tunnel-Type = 13 (VLAN), Tunnel-Medium-Type = 6 (IEEE-802)
-
-        if (LDAP-Group == "animatori") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "20"
-            }
+    if (&control:Tmp-String-0 && &control:Tmp-String-0 != '') {
+        update reply {
+            Tunnel-Type             := VLAN
+            Tunnel-Medium-Type      := IEEE-802
+            Tunnel-Private-Group-Id := &control:Tmp-String-0
         }
-        elsif (LDAP-Group == "fma") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "20"
-            }
+    }
+    else {
+        update reply {
+            Reply-Message := "Pristup odmietnuty: pouzivatel nie je clenom ziadnej povolenej skupiny"
         }
-        elsif (LDAP-Group == "spolupracovnici") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "30"
-            }
-        }
-        elsif (LDAP-Group == "hostia") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "40"
-            }
-        }
-        elsif (LDAP-Group == "docasny") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "40"
-            }
-        }
-        elsif (LDAP-Group == "sdb") {
-            update reply {
-                Tunnel-Type             := VLAN
-                Tunnel-Medium-Type      := IEEE-802
-                Tunnel-Private-Group-Id := "10"
-            }
-        }
-        else {
-            # Žiadna zodpovedajúca skupina – deny prístup
-            update reply {
-                Reply-Message := "Pristup odmiietnuty: pouzivatel nie je clenom ziadnej povolenej skupiny"
-            }
-            reject
-        }
+        reject
     }
 }

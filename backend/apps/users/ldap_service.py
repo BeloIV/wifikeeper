@@ -15,25 +15,36 @@ from ldap3.utils.conv import escape_filter_chars
 from django.conf import settings
 
 
-GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny']
-
-VLAN_MAP = {
-    'sdb': 10,
-    'animatori': 20,
-    'fma': 20,
-    'spolupracovnici': 30,
-    'hostia': 40,
-    'docasny': 40,
+_FALLBACK_GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny']
+_FALLBACK_VLAN = {'sdb': 10, 'animatori': 20, 'fma': 20, 'spolupracovnici': 30, 'hostia': 40, 'docasny': 40}
+_FALLBACK_LABELS = {
+    'sdb': 'SDB', 'animatori': 'Animátori', 'fma': 'FMA',
+    'spolupracovnici': 'Spolupracovníci', 'hostia': 'Hostia', 'docasny': 'Dočasný',
 }
 
-GROUP_LABELS = {
-    'sdb': 'SDB',
-    'animatori': 'Animátori',
-    'fma': 'FMA',
-    'spolupracovnici': 'Spolupracovníci',
-    'hostia': 'Hostia',
-    'docasny': 'Dočasný',
-}
+
+def get_groups() -> list[str]:
+    try:
+        from apps.users.models import LDAPGroup
+        return list(LDAPGroup.objects.values_list('name', flat=True))
+    except Exception:
+        return _FALLBACK_GROUPS
+
+
+def get_vlan_map() -> dict[str, int]:
+    try:
+        from apps.users.models import LDAPGroup
+        return {g.name: g.vlan for g in LDAPGroup.objects.all()}
+    except Exception:
+        return _FALLBACK_VLAN
+
+
+def get_group_labels() -> dict[str, str]:
+    try:
+        from apps.users.models import LDAPGroup
+        return {g.name: g.label for g in LDAPGroup.objects.all()}
+    except Exception:
+        return _FALLBACK_LABELS
 
 
 def _conn():
@@ -183,12 +194,14 @@ def set_password(username: str, password: str):
 
 def delete_user(username: str):
     conn = _conn()
-    # Najprv odober zo skupiny
     current_group = get_user_group(username)
     if current_group:
         _remove_from_group(username, current_group, conn=conn)
     conn.delete(_user_dn(username))
     conn.unbind()
+    from django.db import connection as db
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM radreply WHERE username = %s", [username])
 
 
 def set_active(username: str, active: bool):
@@ -205,7 +218,7 @@ def set_active(username: str, active: bool):
 def get_user_group(username: str) -> str | None:
     conn = _conn()
     user_dn = _user_dn(username)
-    for group in GROUPS:
+    for group in get_groups():
         conn.search(
             f'ou=groups,{settings.LDAP_BASE_DN}',
             f'(&(cn={escape_filter_chars(group)})(member={escape_filter_chars(user_dn)}))',
@@ -219,7 +232,7 @@ def get_user_group(username: str) -> str | None:
 
 
 def set_user_group(username: str, group: str, conn=None):
-    """Presunie používateľa do danej skupiny (odstráni zo všetkých ostatných)."""
+    """Presunie používateľa do danej skupiny a aktualizuje VLAN v radreply."""
     close = conn is None
     if conn is None:
         conn = _conn()
@@ -227,7 +240,7 @@ def set_user_group(username: str, group: str, conn=None):
     user_dn = _user_dn(username)
 
     # Odober zo všetkých skupín
-    for g in GROUPS:
+    for g in get_groups():
         gdn = _group_dn(g)
         conn.search(
             f'ou=groups,{settings.LDAP_BASE_DN}',
@@ -242,6 +255,27 @@ def set_user_group(username: str, group: str, conn=None):
 
     if close:
         conn.unbind()
+
+    # Aktualizuj VLAN atribúty v radreply (FreeRADIUS ich číta pri každom authorize)
+    vlan_map = get_vlan_map()
+    vlan = vlan_map.get(group)
+    if vlan is not None:
+        _set_radreply_vlan(username, vlan)
+
+
+def _set_radreply_vlan(username: str, vlan: int):
+    """Zapíše/aktualizuje VLAN Tunnel atribúty pre používateľa v radreply tabuľke."""
+    from django.db import connection as db
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM radreply WHERE username = %s", [username])
+        cur.executemany(
+            "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, ':=', %s)",
+            [
+                (username, 'Tunnel-Type', 'VLAN'),
+                (username, 'Tunnel-Medium-Type', 'IEEE-802'),
+                (username, 'Tunnel-Private-Group-Id', str(vlan)),
+            ],
+        )
 
 
 def _remove_from_group(username: str, group: str, conn=None):
@@ -273,5 +307,29 @@ def generate_temp_username(prefix: str = 'guest') -> str:
     """Vygeneruje unikátne meno pre dočasného používateľa."""
     suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
     return f'{prefix}_{suffix}'
+
+
+# ── Správa skupín ─────────────────────────────────────────────────────────────
+
+def create_ldap_group(name: str):
+    """Vytvorí groupOfNames záznam v LDAP."""
+    conn = _conn()
+    dn = _group_dn(name)
+    # groupOfNames vyžaduje aspoň jedného člena – použijeme dummy dn
+    dummy_dn = f'uid=dummy,ou=users,{settings.LDAP_BASE_DN}'
+    conn.add(dn, object_class=['groupOfNames'], attributes={'cn': name, 'member': [dummy_dn]})
+    if conn.result['result'] != 0:
+        raise LDAPException(f'Chyba pri vytváraní skupiny: {conn.result["description"]}')
+    conn.unbind()
+
+
+def delete_ldap_group(name: str):
+    """Vymaže groupOfNames záznam z LDAP."""
+    conn = _conn()
+    dn = _group_dn(name)
+    conn.delete(dn)
+    if conn.result['result'] != 0:
+        raise LDAPException(f'Chyba pri mazaní skupiny: {conn.result["description"]}')
+    conn.unbind()
 
 

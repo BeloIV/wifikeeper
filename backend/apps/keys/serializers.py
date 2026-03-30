@@ -13,6 +13,7 @@ class TempKeySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'label', 'key_type', 'ldap_username',
             'valid_hours', 'expires_at', 'used', 'used_at',
+            'max_uses', 'use_count',
             'created_by', 'created_by_name', 'created_at',
             'email_sent_to', 'ldap_deleted', 'is_active', 'is_expired',
         ]
@@ -32,6 +33,7 @@ class TempKeyCreateSerializer(serializers.Serializer):
     key_type = serializers.ChoiceField(choices=TempKey.KeyType.choices)
     valid_hours = serializers.IntegerField(min_value=1, max_value=720, required=False, allow_null=True)
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
+    max_uses = serializers.IntegerField(min_value=2, max_value=1000, required=False, allow_null=True)
     email = serializers.EmailField(required=False, allow_blank=True)
 
     def validate(self, data):
@@ -52,6 +54,11 @@ class TempKeyCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         {'expires_at': 'Dátum expirácie musí byť v budúcnosti.'}
                     )
+        if data['key_type'] == TempKey.KeyType.MULTI_USE:
+            if not data.get('max_uses'):
+                raise serializers.ValidationError(
+                    {'max_uses': 'Zadaj maximálny počet použití.'}
+                )
         return data
 
 

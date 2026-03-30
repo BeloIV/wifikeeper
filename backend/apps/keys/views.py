@@ -82,6 +82,7 @@ class TempKeyListView(APIView):
             ldap_password=encrypt_password(password),
             valid_hours=d.get('valid_hours'),
             expires_at=expires_at,
+            max_uses=d.get('max_uses') if d['key_type'] == TempKey.KeyType.MULTI_USE else None,
             created_by=request.user,
         )
 

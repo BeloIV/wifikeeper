@@ -62,7 +62,7 @@ services:
       - "3799:3799/udp"
     volumes:
       - ./radius/config:/etc/freeradius/3.0
-      - ./certs:/etc/freeradius/3.0/certs
+      - ./certs:/etc/freeradius/certs
     environment:
       FR_POSTGRES_HOST: postgres
       FR_POSTGRES_DB: ${POSTGRES_DB:-wifimanager}

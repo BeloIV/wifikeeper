@@ -12,10 +12,11 @@ export default function KeysPage() {
   const [qr, setQr] = useState<{ qr_code: string; username: string } | null>(null)
   const [form, setForm] = useState({
     label: '',
-    key_type: 'timed' as 'one_time' | 'timed',
+    key_type: 'multi_use' as 'timed' | 'multi_use',
     expiry_mode: 'hours' as 'hours' | 'datetime',
     valid_hours: 24,
     expires_at: '',
+    max_uses: 1,
     email: '',
   })
   const [saving, setSaving] = useState(false)
@@ -46,6 +47,10 @@ export default function KeysPage() {
           body.valid_hours = form.valid_hours
         }
       }
+      if (form.key_type === 'multi_use') {
+        body.max_uses = form.max_uses
+      }
+      // one_time sa už nevytvára cez UI – multi_use s max_uses=1 ho nahrádza
       const created = await api.post<TempKey>('/keys/', body)
       setNewKey(created)
       setShowCreate(false)
@@ -107,17 +112,19 @@ export default function KeysPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm text-gray-900">{key.ldap_username}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        key.key_type === 'one_time'
-                          ? 'bg-purple-100 text-purple-700'
+                        key.key_type === 'multi_use' || key.key_type === 'one_time'
+                          ? 'bg-orange-100 text-orange-700'
                           : 'bg-blue-100 text-blue-700'
                       }`}>
                         {key.key_type === 'one_time'
-                          ? 'Jednorazový'
-                          : key.valid_hours
-                            ? `${key.valid_hours}h`
-                            : `do ${formatDate(key.expires_at)}`}
+                          ? `${key.used ? 1 : 0}/1×`
+                          : key.key_type === 'multi_use'
+                            ? `${key.use_count}/${key.max_uses}×`
+                            : key.valid_hours
+                              ? `${key.valid_hours}h`
+                              : `do ${formatDate(key.expires_at)}`}
                       </span>
-                      {key.used && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">použitý</span>}
+                      {key.used && <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">vyčerpaný</span>}
                       {key.is_expired && !key.used && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">expirovaný</span>}
                     </div>
                     <div className="text-xs text-gray-400 mt-0.5">
@@ -158,18 +165,18 @@ export default function KeysPage() {
             <Field label="Typ kľúča">
               <div className="grid grid-cols-2 gap-2">
                 <label className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer ${
-                  form.key_type === 'one_time' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  form.key_type === 'multi_use' ? 'border-orange-500 bg-orange-50' : 'border-gray-200'
                 }`}>
                   <input
                     type="radio"
-                    value="one_time"
-                    checked={form.key_type === 'one_time'}
-                    onChange={() => setForm({ ...form, key_type: 'one_time' })}
+                    value="multi_use"
+                    checked={form.key_type === 'multi_use'}
+                    onChange={() => setForm({ ...form, key_type: 'multi_use' })}
                     className="sr-only"
                   />
                   <div>
-                    <div className="text-sm font-medium">Jednorazový</div>
-                    <div className="text-xs text-gray-400">1 prihlásenie</div>
+                    <div className="text-sm font-medium">N-násobný</div>
+                    <div className="text-xs text-gray-400">1× = jednorazový</div>
                   </div>
                 </label>
                 <label className={`flex items-center gap-2 p-3 rounded-lg border cursor-pointer ${
@@ -184,7 +191,7 @@ export default function KeysPage() {
                   />
                   <div>
                     <div className="text-sm font-medium">Časový</div>
-                    <div className="text-xs text-gray-400">N hodín</div>
+                    <div className="text-xs text-gray-400">platný N hodín</div>
                   </div>
                 </label>
               </div>
@@ -256,6 +263,31 @@ export default function KeysPage() {
                   </Field>
                 )}
               </>
+            )}
+            {form.key_type === 'multi_use' && (
+              <Field label="Počet prihlásení">
+                <div className="flex gap-2">
+                  {[1, 2, 5, 10, 20, 50].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setForm({ ...form, max_uses: n })}
+                      className={`flex-1 py-1.5 text-xs rounded-lg border ${
+                        form.max_uses === n ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {n}×
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={2}
+                    max={1000}
+                    value={form.max_uses}
+                    onChange={(e) => setForm({ ...form, max_uses: parseInt(e.target.value) || 2 })}
+                    className="w-16 border border-gray-200 rounded-lg px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+              </Field>
             )}
             <Field label="Email hosťa (voliteľné)">
               <input

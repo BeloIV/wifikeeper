@@ -59,12 +59,11 @@
 ## nastavenie ssh kluca na git 
 ## tailsacale expose 
 
-docker compose logs stalwart | grep -i "admin\|password\|secret\|Management" 
 
 
-kluce pridat moznost zvolit datum 
+ 
+zobrazenie pre telefon doladit 
 
 
-pridaj basic salezaianipresov.xyz -> salezianipresov.sk
 
-bez samostatneho smtp 
+

@@ -1,23 +1,28 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api, type LDAPUser, GROUP_LABELS, GROUPS } from '@/lib/api'
+import { api, type LDAPUser, type GroupInfo } from '@/lib/api'
 
 type FormData = {
-  username: string
-  password: string
   first_name: string
   last_name: string
   email: string
   group: string
 }
 
+type CreatedUser = {
+  username: string
+  password: string
+  email: string
+}
+
 const INITIAL_FORM: FormData = {
-  username: '', password: '', first_name: '', last_name: '', email: '', group: 'hostia',
+  first_name: '', last_name: '', email: '', group: '',
 }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<LDAPUser[]>([])
+  const [groups, setGroups] = useState<GroupInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [groupFilter, setGroupFilter] = useState('')
@@ -25,9 +30,16 @@ export default function UsersPage() {
   const [form, setForm] = useState<FormData>(INITIAL_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [editUser, setEditUser] = useState<LDAPUser | null>(null)
+  const [createdUser, setCreatedUser] = useState<CreatedUser | null>(null)
   const [changePassUser, setChangePassUser] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
+
+  useEffect(() => {
+    api.get<GroupInfo[]>('/users/groups/').then((gs) => {
+      setGroups(gs)
+      setForm((f) => ({ ...f, group: f.group || gs[0]?.name || '' }))
+    })
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -43,9 +55,10 @@ export default function UsersPage() {
     setSaving(true)
     setError('')
     try {
-      await api.post('/users/', form)
+      const result = await api.post<CreatedUser>('/users/', form)
       setShowCreate(false)
-      setForm(INITIAL_FORM)
+      setForm({ ...INITIAL_FORM, group: groups[0]?.name || '' })
+      setCreatedUser(result)
       load()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Chyba')
@@ -99,8 +112,8 @@ export default function UsersPage() {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="">Všetky skupiny</option>
-          {GROUPS.map((g) => (
-            <option key={g} value={g}>{GROUP_LABELS[g]}</option>
+          {groups.map((g) => (
+            <option key={g.name} value={g.name}>{g.label}</option>
           ))}
         </select>
       </div>
@@ -129,7 +142,7 @@ export default function UsersPage() {
                   </div>
                   <div className="text-xs text-gray-400 truncate">
                     {user.full_name && `${user.full_name} · `}
-                    {GROUP_LABELS[user.group] || user.group}
+                    {groups.find((g) => g.name === user.group)?.label || user.group}
                     {user.email && ` · ${user.email}`}
                   </div>
                 </div>
@@ -167,46 +180,95 @@ export default function UsersPage() {
         <Modal title="Nový používateľ" onClose={() => { setShowCreate(false); setError('') }}>
           <div className="space-y-3">
             {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
-            <Field label="Meno (login)">
-              <input
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })}
-                className="input"
-                placeholder="jan.novak"
-              />
-            </Field>
-            <Field label="Heslo (min. 8 znakov)">
-              <input
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="input"
-              />
-            </Field>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Meno">
-                <input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="input" />
+              <Field label="Meno *">
+                <input
+                  value={form.first_name}
+                  onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                  className="input"
+                  placeholder="Ján"
+                />
               </Field>
-              <Field label="Priezvisko">
-                <input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="input" />
+              <Field label="Priezvisko *">
+                <input
+                  value={form.last_name}
+                  onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                  className="input"
+                  placeholder="Novák"
+                />
               </Field>
             </div>
-            <Field label="Email">
-              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
+            <Field label="Email (voliteľný – login aj doručenie hesla)">
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="input"
+                placeholder="jan@priklad.sk"
+              />
             </Field>
             <Field label="Skupina / VLAN">
               <select value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} className="input">
-                {GROUPS.map((g) => <option key={g} value={g}>{GROUP_LABELS[g]}</option>)}
+                {groups.map((g) => <option key={g.name} value={g.name}>{g.label} – VLAN {g.vlan}</option>)}
               </select>
             </Field>
+            {!form.email && form.first_name && form.last_name && (
+              <p className="text-xs text-gray-400">
+                Login bude: <span className="font-mono text-gray-600">{slugify(form.first_name, form.last_name)}</span>
+              </p>
+            )}
             <div className="flex gap-2 pt-2">
-              <button onClick={createUser} disabled={saving} className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                {saving ? 'Ukladám...' : 'Vytvoriť'}
+              <button
+                onClick={createUser}
+                disabled={saving || !form.first_name || !form.last_name}
+                className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Vytváram...' : 'Vytvoriť'}
               </button>
               <button onClick={() => { setShowCreate(false); setError('') }} className="px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
                 Zrušiť
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal – výsledok vytvorenia */}
+      {createdUser && (
+        <Modal title="Používateľ vytvorený" onClose={() => setCreatedUser(null)}>
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700">
+              Účet bol úspešne vytvorený.
+              {createdUser.email && ' Prihlasovacie údaje boli odoslané emailom.'}
+            </div>
+            <div className="bg-gray-50 rounded-xl border border-gray-200 divide-y divide-gray-200 overflow-hidden">
+              <div className="flex items-center px-4 py-3 gap-3">
+                <span className="text-xs text-gray-400 w-16 flex-shrink-0">Login</span>
+                <span className="font-mono text-sm text-gray-900 flex-1">{createdUser.username}</span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(createdUser.username)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Kopírovať
+                </button>
+              </div>
+              <div className="flex items-center px-4 py-3 gap-3">
+                <span className="text-xs text-gray-400 w-16 flex-shrink-0">Heslo</span>
+                <span className="font-mono text-sm font-bold text-gray-900 flex-1 tracking-wider">{createdUser.password}</span>
+                <button
+                  onClick={() => navigator.clipboard.writeText(createdUser.password)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
+                >
+                  Kopírovať
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setCreatedUser(null)}
+              className="w-full bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700"
+            >
+              Hotovo
+            </button>
           </div>
         </Modal>
       )}
@@ -241,6 +303,11 @@ export default function UsersPage() {
       )}
     </div>
   )
+}
+
+function slugify(first: string, last: string): string {
+  const str = `${first}.${last}`.toLowerCase()
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9.]/g, '')
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {

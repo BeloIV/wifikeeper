@@ -12,7 +12,7 @@ import string
 from .serializers import (
     LDAPUserSerializer, CreateLDAPUserSerializer,
     UpdateLDAPUserSerializer, ChangePasswordSerializer,
-    BulkEmailImportSerializer,
+    BulkEmailImportSerializer, LDAPGroupSerializer,
 )
 
 
@@ -41,25 +41,42 @@ class UserListView(APIView):
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
-        # Skontroluj, či user neexistuje
-        existing = ldap.get_user(d['username'])
-        if existing:
-            return Response({'detail': 'Používateľ s týmto menom už existuje.'}, status=400)
+        email = d.get('email', '').strip()
+        first = d['first_name'].strip()
+        last = d['last_name'].strip()
+
+        # Login: email ak je zadaný, inak meno.priezvisko bez diakritiky
+        if email:
+            username = email
+        else:
+            username = _slugify_name(first, last)
+            if not username:
+                return Response({'detail': 'Nepodarilo sa vygenerovať login z mena.'}, status=400)
+
+        if ldap.get_user(username):
+            return Response({'detail': f'Používateľ "{username}" už existuje.'}, status=400)
+
+        password = _generate_password(8)
 
         try:
-            user = ldap.create_user(
-                username=d['username'],
-                password=d['password'],
-                first_name=d.get('first_name', ''),
-                last_name=d.get('last_name', ''),
-                email=d.get('email', ''),
+            ldap.create_user(
+                username=username,
+                password=password,
+                first_name=first,
+                last_name=last,
+                email=email,
                 group=d['group'],
             )
         except LDAPException as e:
             return Response({'detail': str(e)}, status=400)
 
-        audit_log(request, 'create_user', d['username'], {'group': d['group']})
-        return Response(user, status=201)
+        if email:
+            from .tasks import send_user_credentials_email
+            group_label = ldap.get_group_labels().get(d['group'], d['group'])
+            send_user_credentials_email.delay(email, username, password, group_label)
+
+        audit_log(request, 'create_user', username, {'group': d['group']})
+        return Response({'username': username, 'password': password, 'email': email}, status=201)
 
 
 class UserDetailView(APIView):
@@ -147,6 +164,14 @@ def _generate_password(length=8) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
+def _slugify_name(first: str, last: str) -> str:
+    import unicodedata
+    raw = f'{first}.{last}'.lower().strip()
+    normalized = unicodedata.normalize('NFD', raw)
+    ascii_str = normalized.encode('ascii', 'ignore').decode('ascii')
+    return ''.join(c for c in ascii_str if c.isalnum() or c == '.')
+
+
 class UserBulkView(APIView):
     permission_classes = [IsAdmin]
 
@@ -157,7 +182,7 @@ class UserBulkView(APIView):
         emails = d['emails']
         group = d['group']
 
-        group_label = ldap.GROUP_LABELS.get(group, group)
+        group_label = ldap.get_group_labels().get(group, group)
         # Zisti ďalšie voľné poradové ID raz pre celú dávku
         next_id = ldap.get_next_group_id(group)
 
@@ -201,12 +226,16 @@ class UserGroupListView(APIView):
         users = ldap.list_users()
         detail = request.query_params.get('detail') == '1'
 
+        group_names = ldap.get_groups()
+        group_labels = ldap.get_group_labels()
+        vlan_map = ldap.get_vlan_map()
+
         groups = {}
-        for g in ldap.GROUPS:
+        for g in group_names:
             groups[g] = {
                 'name': g,
-                'label': ldap.GROUP_LABELS.get(g, g),
-                'vlan': ldap.VLAN_MAP.get(g, 0),
+                'label': group_labels.get(g, g),
+                'vlan': vlan_map.get(g, 0),
                 'member_count': 0,
                 'members': [],
             }
@@ -219,3 +248,51 @@ class UserGroupListView(APIView):
                     groups[g]['members'].append(user)
 
         return Response(list(groups.values()))
+
+    def post(self, request):
+        if not request.user.is_admin():
+            return Response({'detail': 'Nedostatočné oprávnenia.'}, status=403)
+
+        serializer = LDAPGroupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        from apps.users.models import LDAPGroup
+        if LDAPGroup.objects.filter(name=d['name']).exists():
+            return Response({'detail': 'Skupina s týmto názvom už existuje.'}, status=400)
+
+        try:
+            ldap.create_ldap_group(d['name'])
+        except Exception as e:
+            return Response({'detail': str(e)}, status=400)
+
+        group = LDAPGroup.objects.create(name=d['name'], label=d['label'], vlan=d['vlan'])
+        audit_log(request, 'create_group', d['name'], {'label': d['label'], 'vlan': d['vlan']})
+        return Response({'name': group.name, 'label': group.label, 'vlan': group.vlan,
+                         'member_count': 0, 'members': []}, status=201)
+
+
+class UserGroupDetailView(APIView):
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, name):
+        from apps.users.models import LDAPGroup
+        try:
+            group = LDAPGroup.objects.get(name=name)
+        except LDAPGroup.DoesNotExist:
+            return Response({'detail': 'Skupina nenájdená.'}, status=404)
+
+        # Skontroluj, či skupina nie je obsadená
+        users = ldap.list_users()
+        members = [u for u in users if u.get('group') == name]
+        if members:
+            return Response({'detail': f'Skupinu nie je možné vymazať – obsahuje {len(members)} používateľov.'}, status=400)
+
+        try:
+            ldap.delete_ldap_group(name)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=400)
+
+        group.delete()
+        audit_log(request, 'delete_group', name, {})
+        return Response(status=204)

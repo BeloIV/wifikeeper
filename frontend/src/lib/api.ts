@@ -83,13 +83,15 @@ export type LDAPUser = {
 export type TempKey = {
   id: string
   label: string
-  key_type: 'one_time' | 'timed'
+  key_type: 'one_time' | 'timed' | 'multi_use'
   ldap_username: string
   ldap_password?: string
   valid_hours: number | null
   expires_at: string | null
   used: boolean
   used_at: string | null
+  max_uses: number | null
+  use_count: number
   created_by: number | null
   created_by_name: string | null
   created_at: string
@@ -130,17 +132,7 @@ export type AuditLog = {
   timestamp: string
 }
 
-export const GROUPS = ['sdb', 'animatori', 'fma', 'spolupracovnici', 'hostia', 'docasny'] as const
-export type Group = (typeof GROUPS)[number]
-
-export const GROUP_LABELS: Record<string, string> = {
-  sdb: 'SDB – VLAN 10',
-  animatori: 'Animátori – VLAN 20',
-  fma: 'FMA – VLAN 20',
-  spolupracovnici: 'Spolupracovníci – VLAN 30',
-  hostia: 'Hostia – VLAN 40',
-  docasny: 'Dočasný – VLAN 40',
-}
+export type Group = string
 
 export const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Superadmin',
