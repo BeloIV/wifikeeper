@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api, type TempKey } from '@/lib/api'
+import { api, type TempKey, type GroupInfo } from '@/lib/api'
 import { formatDate, formatRelative } from '@/lib/utils'
 
 export default function KeysPage() {
@@ -10,8 +10,10 @@ export default function KeysPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [newKey, setNewKey] = useState<TempKey | null>(null)
   const [qr, setQr] = useState<{ qr_code: string; username: string } | null>(null)
+  const [groups, setGroups] = useState<GroupInfo[]>([])
   const [form, setForm] = useState({
     label: '',
+    group: '',
     key_type: 'multi_use' as 'timed' | 'multi_use',
     expiry_mode: 'hours' as 'hours' | 'datetime',
     valid_hours: 24,
@@ -31,12 +33,20 @@ export default function KeysPage() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    api.get<GroupInfo[]>('/groups/').then((data) => {
+      setGroups(data)
+      if (data.length > 0) setForm((f) => ({ ...f, group: f.group || data[0].name }))
+    })
+  }, [])
+
   async function createKey() {
     setSaving(true)
     setError('')
     try {
       const body: Record<string, unknown> = {
         label: form.label,
+        group: form.group,
         key_type: form.key_type,
         email: form.email,
       }
@@ -161,6 +171,19 @@ export default function KeysPage() {
                 className="input"
                 placeholder="napr. Ján Novák – návšteva 22.3."
               />
+            </Field>
+            <Field label="Skupina / VLAN">
+              <select
+                value={form.group}
+                onChange={(e) => setForm({ ...form, group: e.target.value })}
+                className="input"
+              >
+                {groups.map((g) => (
+                  <option key={g.name} value={g.name}>
+                    {g.label} (VLAN {g.vlan})
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Typ kľúča">
               <div className="grid grid-cols-2 gap-2">

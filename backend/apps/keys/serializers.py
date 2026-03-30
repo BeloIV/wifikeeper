@@ -30,11 +30,18 @@ class TempKeySerializer(serializers.ModelSerializer):
 
 class TempKeyCreateSerializer(serializers.Serializer):
     label = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    group = serializers.CharField(max_length=64)
     key_type = serializers.ChoiceField(choices=TempKey.KeyType.choices)
     valid_hours = serializers.IntegerField(min_value=1, max_value=720, required=False, allow_null=True)
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
     max_uses = serializers.IntegerField(min_value=2, max_value=1000, required=False, allow_null=True)
     email = serializers.EmailField(required=False, allow_blank=True)
+
+    def validate_group(self, value):
+        from apps.users.ldap_service import get_groups
+        if value not in get_groups():
+            raise serializers.ValidationError(f'Skupina "{value}" neexistuje.')
+        return value
 
     def validate(self, data):
         if data['key_type'] == TempKey.KeyType.TIMED:

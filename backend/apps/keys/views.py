@@ -62,7 +62,7 @@ class TempKeyListView(APIView):
                 first_name=d.get('label', '') or 'Host',
                 last_name='',
                 email=d.get('email', ''),
-                group='docasny',
+                group=d['group'],
             )
         except LDAPException as e:
             return Response({'detail': f'Chyba LDAP: {e}'}, status=400)
