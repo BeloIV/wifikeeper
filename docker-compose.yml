@@ -87,7 +87,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-wifimanager}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB:-wifimanager}
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-admin}
-      DJANGO_SUPERUSER_EMAIL: ${ADMIN_EMAIL:-admin@salezianipresov.xyz}
+      DJANGO_SUPERUSER_EMAIL: ${ADMIN_EMAIL}
       SECRET_KEY: ${DJANGO_SECRET_KEY}
     command:
       - sh
@@ -132,12 +132,12 @@ services:
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "True"
       ALLOWED_HOSTS: "*"
-      EMAIL_HOST: smtp-relay.brevo.com
-      EMAIL_PORT: 587
+      EMAIL_HOST: ${EMAIL_HOST:-smtp-relay.brevo.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USER: ${BREVO_SMTP_USER}
       EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
-      MAIL_FROM: ${MAIL_FROM:-no-reply@salezianipresov.xyz}
+      MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: >
       sh -c "python manage.py migrate &&
@@ -166,12 +166,12 @@ services:
       SECRET_KEY: ${DJANGO_SECRET_KEY}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-      EMAIL_HOST: smtp-relay.brevo.com
-      EMAIL_PORT: 587
+      EMAIL_HOST: ${EMAIL_HOST:-smtp-relay.brevo.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USER: ${BREVO_SMTP_USER}
       EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
-      MAIL_FROM: ${MAIL_FROM:-no-reply@salezianipresov.xyz}
+      MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config worker -l info
 
@@ -198,12 +198,12 @@ services:
       SECRET_KEY: ${DJANGO_SECRET_KEY}
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-      EMAIL_HOST: smtp-relay.brevo.com
-      EMAIL_PORT: 587
+      EMAIL_HOST: ${EMAIL_HOST:-smtp-relay.brevo.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
       EMAIL_USER: ${BREVO_SMTP_USER}
       EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
-      MAIL_FROM: ${MAIL_FROM:-no-reply@salezianipresov.xyz}
+      MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 

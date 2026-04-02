@@ -11,8 +11,8 @@ x-backend-env: &backend-env
   SECRET_KEY: ${DJANGO_SECRET_KEY}
   FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
   RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-  EMAIL_HOST: smtp-relay.brevo.com
-  EMAIL_PORT: 587
+  EMAIL_HOST: ${EMAIL_HOST:-smtp-relay.brevo.com}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
   EMAIL_USER: ${BREVO_SMTP_USER}
   EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
   EMAIL_USE_TLS: "True"
@@ -117,7 +117,7 @@ services:
     environment:
       <<: *backend-env
       DEBUG: "False"
-      ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${LOCAL_IP:-192.168.1.222},localhost
+      ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${LOCAL_IP},localhost
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
     command: >
