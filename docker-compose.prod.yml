@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Production Docker Compose – Let's Encrypt + Cloudflare DNS-01
 # Spustenie: docker compose -f docker-compose.prod.yml up -d
 
@@ -12,7 +10,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
@@ -42,16 +40,13 @@ services:
       LDAP_READONLY_USER: "true"
       LDAP_READONLY_USER_USERNAME: readonly
       LDAP_READONLY_USER_PASSWORD: ${LDAP_READONLY_PASSWORD}
-      LDAP_TLS: "true"
-      LDAP_TLS_CRT_FILENAME: ldap.crt
-      LDAP_TLS_KEY_FILENAME: ldap.key
-      LDAP_TLS_CA_CRT_FILENAME: ca.crt
-      LDAP_TLS_ENFORCE: "false"
+      LDAP_TLS: "false"
+      LDAP_RFC2307BIS_SCHEMA: "false"
+    command: --copy-service
     volumes:
-      - ldap_data:/var/lib/ldap
-      - ldap_config:/etc/ldap/slapd.d
-      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
-      - /etc/letsencrypt/live/${DOMAIN}:/container/service/slapd/assets/certs:ro
+      - ./data/ldap:/var/lib/ldap
+      - ./data/ldap-config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
 
   freeradius:
     build:
@@ -68,7 +63,7 @@ services:
       - "3799:3799/udp"
     volumes:
       - ./radius/config:/etc/freeradius/3.0
-      - /etc/letsencrypt/live/${DOMAIN}:/etc/freeradius/3.0/certs:ro
+      - ./certs:/etc/freeradius/certs
     environment:
       FR_POSTGRES_HOST: postgres
       FR_POSTGRES_DB: ${POSTGRES_DB}
@@ -103,16 +98,19 @@ services:
       FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
       RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
       DEBUG: "False"
-      ALLOWED_HOSTS: ${DOMAIN}
+      ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${LOCAL_IP:-192.168.1.222},localhost
       EMAIL_HOST: smtp-relay.brevo.com
       EMAIL_PORT: 587
       EMAIL_USER: ${BREVO_SMTP_USER}
       EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
       EMAIL_USE_TLS: "True"
       ADMIN_EMAIL: ${ADMIN_EMAIL}
-    command: >
-      sh -c "python manage.py migrate &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
+    command:
+      - sh
+      - -c
+      - "python manage.py migrate && python /app/init_superuser.py && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
 
   celery:
     build:
@@ -151,7 +149,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
       MONGO_INITDB_DATABASE: unifi
     volumes:
-      - unifi_db:/data/db
+      - ./data/unifi-db:/data/db
       - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
@@ -176,7 +174,7 @@ services:
       MONGO_DBNAME: unifi
       MONGO_AUTHSOURCE: admin
     volumes:
-      - unifi_config:/config
+      - ./data/unifi-config:/config
     ports:
       - "8443:8443"       # Web UI (HTTPS)
       - "8080:8080"       # AP → controller komunikácia (protokolový port, nemeniť)
@@ -221,9 +219,3 @@ services:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
-volumes:
-  postgres_data:
-  ldap_data:
-  ldap_config:
-  unifi_db:
-  unifi_config:
