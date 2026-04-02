@@ -172,42 +172,6 @@ def expire_temp_key(self, key_id: str):
         logger.error(f'expire_temp_key: chyba LDAP pre {username}: {exc}')
         raise self.retry(exc=exc)
 
-
-@shared_task
-def notify_expiring_keys():
-    """Pošle email adminovi o kľúčoch expirujúcich o menej ako 1 hodinu."""
-    from .models import TempKey
-    from django.core.mail import send_mail
-
-    now = timezone.now()
-    soon = now + timedelta(hours=1)
-
-    expiring = TempKey.objects.filter(
-        ldap_deleted=False,
-        used=False,
-        expires_at__gt=now,
-        expires_at__lte=soon,
-    )
-
-    if not expiring.exists():
-        return
-
-    lines = []
-    for key in expiring:
-        lines.append(
-            f'- {key.ldap_username} ({key.label or "bez popisu"}) '
-            f'expiruje {key.expires_at.strftime("%d.%m.%Y %H:%M")}'
-        )
-
-    send_mail(
-        subject='[wifi-manager] Blížiaca sa expirácia kľúčov',
-        message='Nasledujúce dočasné kľúče expirujú do 1 hodiny:\n\n' + '\n'.join(lines),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[settings.ADMIN_EMAIL],
-        fail_silently=True,
-    )
-
-
 @shared_task
 def send_key_email(key_id: str, recipient_email: str):
     """Pošle kľúč emailom hosťovi s QR kódom a iOS WiFi profilom."""
@@ -231,10 +195,10 @@ def send_key_email(key_id: str, recipient_email: str):
         validity_desc = f'{key.max_uses} prihlásení'
     elif key.valid_hours:
         validity_label = 'Časový'
-        validity_desc = f'{key.valid_hours} hodín (do {key.expires_at.strftime("%d.%m.%Y %H:%M")})'
+        validity_desc = f'{key.valid_hours} hodín (do {timezone.localtime(key.expires_at).strftime("%d.%m.%Y %H:%M")})'
     else:
         validity_label = 'Časový'
-        validity_desc = f'do {key.expires_at.strftime("%d.%m.%Y %H:%M")}'
+        validity_desc = f'do {timezone.localtime(key.expires_at).strftime("%d.%m.%Y %H:%M")}'
 
     qr_b64 = _generate_wifi_qr_base64(ssid, password)
 
