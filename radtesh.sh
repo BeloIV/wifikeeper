@@ -2,24 +2,24 @@
 # WiFi RADIUS test skript
 # Uprav zoznamy nižšie, potom spusti: ./radtesh.sh
 
-RADIUS_HOST="192.168.1.222"
-SECRET="6a8284911046cf0c191f0532425e28e30f501e966be7fd6f"
+# Načítaj .env ak existuje
+if [ -f "$(dirname "$0")/.env" ]; then
+    set -a; source "$(dirname "$0")/.env"; set +a
+fi
+
+RADIUS_HOST="${SERVER_IP:-localhost}"
+SECRET="${RADIUS_SECRET:?RADIUS_SECRET nie je nastavený v .env}"
 
 # ── Zoznam bežných používateľov (testuje sa 1× Accept) ───────────────────────
 # Formát: "username:heslo"
 USERS=(
-    "beluskostefan@gmail.com:E8z5IMHD"
-    # "dalsi@email.sk:heslo"
+    # "pouzivatel@email.sk:heslo"
 )
 
 # ── Zoznam N-násobných kľúčov (N× Accept, N+1× Reject) ──────────────────────
 # Formát: "username:heslo:N"
 MULTI_KEYS=(
     # "guest_abc123:HesloKluca:3"
-    "beluskostefan@gmail.com:6HuAZuhw:4"
-
-    
-
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
