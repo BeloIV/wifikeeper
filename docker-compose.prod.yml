@@ -1,16 +1,46 @@
 # Production Docker Compose – Let's Encrypt + Cloudflare DNS-01
 # Spustenie: docker compose -f docker-compose.prod.yml up -d
 
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+  LDAP_SERVER_URI: ldap://openldap
+  LDAP_BASE_DN: ${LDAP_BASE_DN}
+  LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
+  LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
+  SECRET_KEY: ${DJANGO_SECRET_KEY}
+  FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
+  RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
+  EMAIL_HOST: smtp-relay.brevo.com
+  EMAIL_PORT: 587
+  EMAIL_USER: ${BREVO_SMTP_USER}
+  EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
+  EMAIL_USE_TLS: "True"
+  ADMIN_EMAIL: ${ADMIN_EMAIL}
+
+x-backend-build: &backend-build
+  build:
+    context: ./backend
+    target: prod
+  restart: always
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
+  # ── Infraštruktúra ────────────────────────────────────────────────────────────
+
   postgres:
     image: postgres:15-alpine
     restart: always
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
@@ -20,16 +50,22 @@ services:
   redis:
     image: redis:7-alpine
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    command: redis-server --requirepass ${REDIS_PASSWORD}
 
   openldap:
     image: osixia/openldap:1.5.0
     restart: always
+    volumes:
+      - ./data/ldap:/var/lib/ldap
+      - ./data/ldap-config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
     environment:
       LDAP_ORGANISATION: "Salezianske oratorium"
       LDAP_DOMAIN: ${LDAP_DOMAIN}
@@ -43,10 +79,8 @@ services:
       LDAP_TLS: "false"
       LDAP_RFC2307BIS_SCHEMA: "false"
     command: --copy-service
-    volumes:
-      - ./data/ldap:/var/lib/ldap
-      - ./data/ldap-config:/etc/ldap/slapd.d
-      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom
+
+  # ── RADIUS ────────────────────────────────────────────────────────────────────
 
   freeradius:
     build:
@@ -76,127 +110,26 @@ services:
       RADIUS_SECRET: ${RADIUS_SECRET}
       RADIUS_CLIENT_NETWORK: ${RADIUS_CLIENT_NETWORK:-0.0.0.0/0}
 
-  backend:
-    build:
-      context: ./backend
-      target: prod
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  # ── Aplikácia ─────────────────────────────────────────────────────────────────
 
+  backend:
+    <<: *backend-build
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      LDAP_SERVER_URI: ldap://openldap
-      LDAP_BASE_DN: ${LDAP_BASE_DN}
-      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
-      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
-      SECRET_KEY: ${DJANGO_SECRET_KEY}
-      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
-      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
+      <<: *backend-env
       DEBUG: "False"
       ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${LOCAL_IP:-192.168.1.222},localhost
-      EMAIL_HOST: smtp-relay.brevo.com
-      EMAIL_PORT: 587
-      EMAIL_USER: ${BREVO_SMTP_USER}
-      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
-      EMAIL_USE_TLS: "True"
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
-    command:
-      - sh
-      - -c
-      - "python manage.py migrate && python /app/init_superuser.py && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+    command: >
+      sh -c "python manage.py migrate &&
+             python /app/init_superuser.py &&
+             exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
 
   celery:
-    build:
-      context: ./backend
-      target: prod
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
+    <<: *backend-build
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      LDAP_SERVER_URI: ldap://openldap
-      LDAP_BASE_DN: ${LDAP_BASE_DN}
-      LDAP_BIND_DN: cn=admin,${LDAP_BASE_DN}
-      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD}
-      SECRET_KEY: ${DJANGO_SECRET_KEY}
-      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY}
-      RADIUS_COA_SECRET: ${RADIUS_COA_SECRET}
-      EMAIL_HOST: smtp-relay.brevo.com
-      EMAIL_PORT: 587
-      EMAIL_USER: ${BREVO_SMTP_USER}
-      EMAIL_PASSWORD: ${BREVO_SMTP_KEY}
-      EMAIL_USE_TLS: "True"
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      <<: *backend-env
     command: celery -A config worker -l info -B --scheduler django_celery_beat.schedulers:DatabaseScheduler
-
-  unifi-db:
-    image: mongo:7
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_USER:-unifi}
-      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
-      MONGO_INITDB_DATABASE: unifi
-    volumes:
-      - ./data/unifi-db:/data/db
-      - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-
-  unifi:
-    image: lscr.io/linuxserver/unifi-network-application:latest
-    restart: always
-    depends_on:
-      unifi-db:
-        condition: service_healthy
-    environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: Europe/Bratislava
-      MONGO_USER: ${UNIFI_MONGO_USER:-unifi}
-      MONGO_PASS: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
-      MONGO_HOST: unifi-db
-      MONGO_PORT: 27017
-      MONGO_DBNAME: unifi
-      MONGO_AUTHSOURCE: admin
-    volumes:
-      - ./data/unifi-config:/config
-    ports:
-      - "8443:8443"       # Web UI (HTTPS)
-      - "8080:8080"       # AP → controller komunikácia (protokolový port, nemeniť)
-      - "3478:3478/udp"   # STUN
-      - "10001:10001/udp" # AP discovery (L2)
-      - "6789:6789"       # Mobile speed test (voliteľné)
-
-  certbot:
-    image: certbot/dns-cloudflare:latest
-    restart: "no"
-    volumes:
-      - /etc/letsencrypt:/etc/letsencrypt
-      - ./certbot/cloudflare.ini:/opt/cloudflare.ini:ro
-    command: >
-      certonly
-      --dns-cloudflare
-      --dns-cloudflare-credentials /opt/cloudflare.ini
-      --email ${ADMIN_EMAIL}
-      --agree-tos
-      --no-eff-email
-      -d ${DOMAIN}
-      -d www.${DOMAIN}
 
   frontend:
     build:
@@ -219,3 +152,63 @@ services:
       - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
 
+  # ── UniFi Controller ──────────────────────────────────────────────────────────
+
+  unifi-db:
+    image: mongo:7
+    restart: always
+    volumes:
+      - ./data/unifi-db:/data/db
+      - ./scripts/unifi-mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_INITDB_DATABASE: unifi
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    restart: always
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+    ports:
+      - "8443:8443"         # Web UI (HTTPS)
+      - "8080:8080"         # AP → controller (nemeniť)
+      - "3478:3478/udp"     # STUN
+      - "10001:10001/udp"   # AP discovery (L2)
+      - "6789:6789"         # Mobile speed test (voliteľné)
+    volumes:
+      - ./data/unifi-config:/config
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Europe/Bratislava
+      MONGO_USER: ${UNIFI_MONGO_USER:-unifi}
+      MONGO_PASS: ${UNIFI_MONGO_PASS:?Nastav UNIFI_MONGO_PASS v .env}
+      MONGO_HOST: unifi-db
+      MONGO_PORT: 27017
+      MONGO_DBNAME: unifi
+      MONGO_AUTHSOURCE: admin
+
+  # ── Certbot ───────────────────────────────────────────────────────────────────
+
+  certbot:
+    image: certbot/dns-cloudflare:latest
+    restart: "no"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot/cloudflare.ini:/opt/cloudflare.ini:ro
+    command: >
+      certonly
+      --dns-cloudflare
+      --dns-cloudflare-credentials /opt/cloudflare.ini
+      --email ${ADMIN_EMAIL}
+      --agree-tos
+      --no-eff-email
+      -d ${DOMAIN}
+      -d www.${DOMAIN}
