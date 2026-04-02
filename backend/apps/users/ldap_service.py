@@ -272,8 +272,9 @@ def set_user_group(username: str, group: str, conn=None):
     # Aktualizuj VLAN atribúty v radreply (FreeRADIUS ich číta pri každom authorize)
     vlan_map = get_vlan_map()
     vlan = vlan_map.get(group)
-    if vlan is not None:
-        _set_radreply_vlan(username, vlan)
+    if vlan is None:
+        raise LDAPException(f"Skupina '{group}' nemá VLAN priradenie v databáze.")
+    _set_radreply_vlan(username, vlan)
 
 
 def _set_radreply_vlan(username: str, vlan: int):

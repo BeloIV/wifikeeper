@@ -8,7 +8,7 @@ SECRET="6a8284911046cf0c191f0532425e28e30f501e966be7fd6f"
 # ── Zoznam bežných používateľov (testuje sa 1× Accept) ───────────────────────
 # Formát: "username:heslo"
 USERS=(
-    "beluskostefan@gmail.com:VTLyp2o0"
+    "beluskostefan@gmail.com:E8z5IMHD"
     # "dalsi@email.sk:heslo"
 )
 
@@ -16,7 +16,7 @@ USERS=(
 # Formát: "username:heslo:N"
 MULTI_KEYS=(
     # "guest_abc123:HesloKluca:3"
-    guest_jg8r7l:RoJOrSlBxz3j:10000
+    "beluskostefan@gmail.com:6HuAZuhw:4"
 
     
 

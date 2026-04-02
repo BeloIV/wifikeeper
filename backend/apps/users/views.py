@@ -133,6 +133,25 @@ class UserPasswordView(APIView):
         if not user:
             return Response({'detail': 'Používateľ nenájdený.'}, status=404)
 
+        # Ak nie je password v tele → automaticky vygeneruj
+        if 'password' not in request.data:
+            password = _generate_password(8)
+            try:
+                ldap.set_password(username, password)
+            except LDAPException as e:
+                return Response({'detail': str(e)}, status=400)
+
+            email = user.get('email', '')
+            email_sent = False
+            if email:
+                from .tasks import send_user_credentials_email
+                group_label = user.get('group', '')
+                send_user_credentials_email.delay(email, username, password, group_label)
+                email_sent = True
+
+            audit_log(request, 'reset_password', username, {'auto_generated': True})
+            return Response({'password': password, 'email_sent': email_sent, 'email': email})
+
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -274,6 +293,37 @@ class UserGroupListView(APIView):
 
 class UserGroupDetailView(APIView):
     permission_classes = [IsAdmin]
+
+    def patch(self, request, name):
+        from apps.users.models import LDAPGroup
+        try:
+            group = LDAPGroup.objects.get(name=name)
+        except LDAPGroup.DoesNotExist:
+            return Response({'detail': 'Skupina nenájdená.'}, status=404)
+
+        new_label = request.data.get('label', group.label)
+        new_vlan = request.data.get('vlan', group.vlan)
+
+        try:
+            new_vlan = int(new_vlan)
+            if not (1 <= new_vlan <= 4094):
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({'detail': 'Neplatná hodnota VLAN (1–4094).'}, status=400)
+
+        vlan_changed = new_vlan != group.vlan
+        group.label = new_label
+        group.vlan = new_vlan
+        group.save()
+
+        if vlan_changed:
+            users = ldap.list_users()
+            for user in users:
+                if user.get('group') == name:
+                    ldap._set_radreply_vlan(user['username'], new_vlan)
+
+        audit_log(request, 'update_group', name, {'label': new_label, 'vlan': new_vlan})
+        return Response({'name': group.name, 'label': group.label, 'vlan': group.vlan})
 
     def delete(self, request, name):
         from apps.users.models import LDAPGroup

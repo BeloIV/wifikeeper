@@ -61,9 +61,4 @@
 
 
 
- 
-zobrazenie pre telefon doladit 
-
-
-
 

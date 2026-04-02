@@ -5,6 +5,7 @@ certbot/cloudflare.ini
 certs/
 *.pem
 snappymail/data/
+data/
 
 # ── Python / Django ───────────────────────────────────────────
 __pycache__/

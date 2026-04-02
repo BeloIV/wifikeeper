@@ -109,7 +109,7 @@ class TempKeyDetailView(APIView):
             key = TempKey.objects.get(pk=pk)
         except TempKey.DoesNotExist:
             return Response({'detail': 'Kľúč nenájdený.'}, status=404)
-        return Response(TempKeySerializer(key).data)
+        return Response(TempKeyWithPasswordSerializer(key).data)
 
     def delete(self, request, pk):
         if not request.user.is_admin():
