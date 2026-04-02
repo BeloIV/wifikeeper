@@ -1,13 +1,13 @@
 from django.contrib import admin
 from django.urls import path, include, re_path
-from rest_framework_simplejwt.views import TokenRefreshView
-from apps.panel_users.views import LoginView
+from apps.panel_users.views import LoginView, LogoutView, TokenRefreshCookieView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Auth
     path('api/auth/login/', LoginView.as_view(), name='token_obtain'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='token_logout'),
+    path('api/auth/refresh/', TokenRefreshCookieView.as_view(), name='token_refresh'),
     # API
     re_path(r'^api/users/?', include('apps.users.urls')),
     re_path(r'^api/keys/?', include('apps.keys.urls')),

@@ -125,7 +125,7 @@ AUTH_USER_MODEL = 'panel_users.AdminUser'
 # ── REST Framework ─────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.panel_users.authentication.JWTCookieAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -160,6 +160,7 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 
 DEFAULT_FROM_EMAIL = os.environ.get('MAIL_FROM', 'no-reply@oratko.sk')
 ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@oratko.sk')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
 # ── Statické súbory ────────────────────────────────────────────────────────────
 STATIC_URL = '/static/'

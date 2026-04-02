@@ -1,15 +1,23 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from .models import AdminUser
+from .models import AdminUser, AdminInvitation
 
 
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    username = serializers.CharField()  # prijíma email aj username
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        user = authenticate(username=data['username'], password=data['password'])
+        login = data['username']
+        # Ak obsahuje @, skús nájsť používateľa podľa emailu
+        if '@' in login:
+            try:
+                db_user = AdminUser.objects.get(email=login)
+                login = db_user.username
+            except AdminUser.DoesNotExist:
+                pass
+        user = authenticate(username=login, password=data['password'])
         if not user:
             raise serializers.ValidationError('Nesprávne prihlasovacie meno alebo heslo.')
         if not user.is_active:
@@ -48,3 +56,14 @@ class AdminUserMeSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdminUser
         fields = ['id', 'username', 'first_name', 'last_name', 'email', 'role']
+
+
+class AdminInvitationCreateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    role = serializers.ChoiceField(choices=AdminUser.Role.choices)
+
+
+class AdminInvitationAcceptSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    password = serializers.CharField(min_length=8, write_only=True)

@@ -1,32 +1,58 @@
 const BASE = '/api'
 
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('access_token')
+// ── Token refresh (singleton, aby nedošlo k súbežným refresh volaniam) ────────
+let refreshPromise: Promise<boolean> | null = null
+
+async function tryRefresh(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise
+  refreshPromise = fetch(`${BASE}/auth/refresh/`, {
+    method: 'POST',
+    credentials: 'include',
+  })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .finally(() => { refreshPromise = null })
+  return refreshPromise
 }
 
+// ── Sanitizácia chybových správ ───────────────────────────────────────────────
+function sanitizeError(data: Record<string, unknown>, status: number): string {
+  if (typeof data.detail === 'string' && data.detail.length < 300) return data.detail
+  if (typeof data.message === 'string' && data.message.length < 300) return data.message
+  return `Chyba servera (${status}).`
+}
+
+// ── Základný request ──────────────────────────────────────────────────────────
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  const res = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' })
 
   if (res.status === 401) {
-    // Token expirovaný – presmeruj na login
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    const ok = await tryRefresh()
+    if (ok) {
+      const retry = await fetch(`${BASE}${path}`, { ...options, headers, credentials: 'include' })
+      if (retry.status === 401) {
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (!retry.ok) {
+        const data = await retry.json().catch(() => ({}))
+        throw new Error(sanitizeError(data, retry.status))
+      }
+      if (retry.status === 204) return undefined as T
+      return retry.json()
+    }
     window.location.href = '/login'
     throw new Error('Unauthorized')
   }
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
-    const msg = data.detail || data.message || `Chyba ${res.status}`
-    throw new Error(msg)
+    throw new Error(sanitizeError(data, res.status))
   }
 
   if (res.status === 204) return undefined as T
@@ -44,19 +70,15 @@ export const api = {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login(username: string, password: string) {
-  const data = await api.post<{
-    access: string
-    refresh: string
-    user: User
-  }>('/auth/login/', { username, password })
-  localStorage.setItem('access_token', data.access)
-  localStorage.setItem('refresh_token', data.refresh)
+  const data = await request<{ user: User }>('/auth/login/', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  })
   return data.user
 }
 
-export function logout() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
+export async function logout() {
+  await fetch(`${BASE}/auth/logout/`, { method: 'POST', credentials: 'include' }).catch(() => {})
   window.location.href = '/login'
 }
 
@@ -68,6 +90,7 @@ export type User = {
   last_name: string
   email: string
   role: 'superadmin' | 'admin' | 'readonly'
+  last_login?: string | null
 }
 
 export type LDAPUser = {

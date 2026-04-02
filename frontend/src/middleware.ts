@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login']
+const PUBLIC_PATHS = ['/login', '/invite']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -10,9 +10,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Jednoduchá ochrana – skutočná autentifikácia sa overuje na API
-  // Token je v localStorage, čo nie je dostupné v middleware (client-side)
-  // Presmerovanie riešime v client komponentoch
+  const token = request.cookies.get('access_token')
+  if (!token) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   return NextResponse.next()
 }
 
