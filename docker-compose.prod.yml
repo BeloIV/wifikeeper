@@ -117,7 +117,7 @@ services:
     environment:
       <<: *backend-env
       DEBUG: "False"
-      ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${LOCAL_IP},localhost
+      ALLOWED_HOSTS: ${DOMAIN},wifimanager.${DOMAIN},${SERVER_IP},localhost
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD}
     command: >
