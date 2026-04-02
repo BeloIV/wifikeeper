@@ -27,6 +27,7 @@ server default {
         mschap
         digest
         suffix
+        device_limit_policy
         eap {
             ok = return
         }
@@ -36,6 +37,7 @@ server default {
                 Auth-Type := ldap
             }
         }
+        sql
         expiration
         logintime
     }

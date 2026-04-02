@@ -1,17 +1,9 @@
-# VLAN policy — číta VLAN z radreply tabuľky (zapísanej Djangom pri set_user_group)
-# Žiaden reštart FreeRADIUS nie je potrebný po zmene skupiny.
+# VLAN policy — dynamická, číta z radreply cez sql modul v authorize.
+# Nevyžaduje reštart FreeRADIUS po zmene skupín alebo používateľov.
 
 vlan_policy {
-    update control {
-        &Tmp-String-0 := "%{sql:SELECT value FROM radreply WHERE username = '%{User-Name}' AND attribute = 'Tunnel-Private-Group-Id' LIMIT 1}"
-    }
-
-    if (&control:Tmp-String-0 && &control:Tmp-String-0 != '') {
-        update reply {
-            Tunnel-Type             := VLAN
-            Tunnel-Medium-Type      := IEEE-802
-            Tunnel-Private-Group-Id := &control:Tmp-String-0
-        }
+    if (&reply:Tunnel-Private-Group-Id) {
+        ok
     }
     else {
         update reply {

@@ -20,6 +20,9 @@ sql {
     # Používame len accounting (autentifikácia ide cez LDAP)
     read_clients = no
 
+    # Musí byť explicitne nastavené, inak SQL-User-Name = "" a radreply sa nenájde
+    sql_user_name = "%{User-Name}"
+
     pool {
         start = 5
         min = 4
