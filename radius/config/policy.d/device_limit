@@ -1,0 +1,16 @@
+# Limit zariadení — historická registrácia MAC adries.
+# Funkcia check_and_register_device() registruje nové zariadenia a blokuje
+# pri prekročení limitu (default 2, nastaviteľné cez admin panel).
+
+device_limit_policy {
+    # Preskočiť ak chýba username alebo MAC adresa zariadenia
+    if (!&User-Name || !&Calling-Station-Id) {
+        noop
+    }
+    elsif ("%{sql:SELECT check_and_register_device('%{SQL-User-Name}', '%{Calling-Station-Id}')}" == "EXCEEDED") {
+        update reply {
+            Reply-Message := "Prekrocili ste limit povolenych zariadeni. Kontaktujte support alebo oslovte saleziana v oratku."
+        }
+        reject
+    }
+}

@@ -79,6 +79,56 @@ class RadiusSession(models.Model):
         return 0
 
 
+class UserDevice(models.Model):
+    """Historicky registrované WiFi zariadenia používateľa (podľa MAC adresy)."""
+    username = models.CharField(max_length=64, db_index=True)
+    mac_address = models.CharField(max_length=50, verbose_name='MAC adresa')
+    label = models.CharField(max_length=100, blank=True, verbose_name='Popis zariadenia')
+    first_seen = models.DateTimeField(auto_now_add=True, verbose_name='Prvé pripojenie')
+    last_seen = models.DateTimeField(auto_now=True, verbose_name='Posledné pripojenie')
+
+    class Meta:
+        db_table = 'user_devices'
+        ordering = ['-last_seen']
+        unique_together = [('username', 'mac_address')]
+        verbose_name = 'Zariadenie používateľa'
+        verbose_name_plural = 'Zariadenia používateľov'
+
+    def __str__(self):
+        return f'{self.username} – {self.mac_address}'
+
+
+class UserDeviceLimit(models.Model):
+    """Individuálny limit zariadení pre používateľa (default 2)."""
+    username = models.CharField(max_length=64, unique=True)
+    max_devices = models.PositiveSmallIntegerField(default=2, verbose_name='Max zariadení')
+
+    class Meta:
+        db_table = 'user_device_limits'
+        verbose_name = 'Limit zariadení používateľa'
+
+    def __str__(self):
+        return f'{self.username}: max {self.max_devices}'
+
+
+class DeviceLimitEvent(models.Model):
+    """Log zamietnutých pokusov o pripojenie 3.+ zariadenia. Celery task z toho posiela email."""
+    username = models.CharField(max_length=64, db_index=True)
+    blocked_mac = models.CharField(max_length=50, verbose_name='Zamietnuté MAC')
+    registered_macs = models.JSONField(default=list, verbose_name='Registrované MAC adresy')
+    event_time = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Čas udalosti')
+    notification_sent = models.BooleanField(default=False, db_index=True, verbose_name='Email odoslaný')
+
+    class Meta:
+        db_table = 'device_limit_events'
+        ordering = ['-event_time']
+        verbose_name = 'Udalosť limitu zariadení'
+        verbose_name_plural = 'Udalosti limitu zariadení'
+
+    def __str__(self):
+        return f'{self.username} – {self.blocked_mac} ({self.event_time})'
+
+
 class RadiusPostAuth(models.Model):
     """Log pokusov o autentifikáciu (Accept/Reject)."""
     username = models.CharField(max_length=64)

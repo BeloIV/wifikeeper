@@ -1,4 +1,5 @@
 import re
+import socket
 import subprocess
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,7 +8,7 @@ from django.db.models import Q
 
 from apps.panel_users.permissions import IsAdminOrReadOnly, IsAdmin
 from apps.audit.utils import audit_log
-from .models import RadiusSession
+from .models import RadiusSession, UserDevice, UserDeviceLimit
 from .serializers import RadiusSessionSerializer
 
 
@@ -114,6 +115,7 @@ class SessionHistoryView(APIView):
                 Q(username__icontains=search) |
                 Q(framed_ip_address__icontains=search) |
                 Q(calling_station_id__icontains=search) |
+                Q(called_station_id__icontains=search) |
                 Q(nas_identifier__icontains=search)
             )
 
@@ -125,3 +127,83 @@ class SessionHistoryView(APIView):
         return paginator.get_paginated_response(
             RadiusSessionSerializer(page, many=True).data
         )
+
+
+def _resolve_device_name(mac_address: str) -> str:
+    """
+    Zistí sieťové meno zariadenia cez reverse DNS z jeho poslednej IP adresy.
+    IP berie z radius_sessions (framed_ip_address) – zapísaná FreeRADIUSom pri accountingu.
+    """
+    session = RadiusSession.objects.filter(
+        calling_station_id__iexact=mac_address,
+        framed_ip_address__isnull=False,
+    ).order_by('-acct_start_time').first()
+
+    if not session or not session.framed_ip_address:
+        return ''
+
+    try:
+        hostname, _, _ = socket.gethostbyaddr(str(session.framed_ip_address))
+        # Vráť len krátky hostname (bez domény)
+        return hostname.split('.')[0]
+    except (socket.herror, socket.gaierror):
+        return ''
+
+
+class UserDevicesView(APIView):
+    """
+    GET   /sessions/devices/<username>/  – zoznam registrovaných zariadení + limit
+    PATCH /sessions/devices/<username>/  – zmena limitu zariadení
+    """
+    permission_classes = [IsAdminOrReadOnly]
+
+    def get(self, request, username):
+        devices = list(UserDevice.objects.filter(username=username))
+        limit_obj = UserDeviceLimit.objects.filter(username=username).first()
+
+        # Doplň/aktualizuj sieťové meno pre každé zariadenie
+        result = []
+        for d in devices:
+            name = _resolve_device_name(d.mac_address)
+            if name and name != d.label:
+                d.label = name
+                d.save(update_fields=['label'])
+            result.append({
+                'mac_address': d.mac_address,
+                'label': d.label,
+                'first_seen': d.first_seen,
+                'last_seen': d.last_seen,
+            })
+
+        return Response({
+            'username': username,
+            'max_devices': limit_obj.max_devices if limit_obj else 2,
+            'devices': result,
+        })
+
+    def patch(self, request, username):
+        if not request.user.is_admin():
+            return Response({'detail': 'Nedostatočné oprávnenia.'}, status=403)
+        max_devices = request.data.get('max_devices')
+        if max_devices is None or not str(max_devices).isdigit() or int(max_devices) < 1:
+            return Response({'detail': 'Neplatná hodnota max_devices.'}, status=400)
+        limit_obj, _ = UserDeviceLimit.objects.get_or_create(username=username)
+        limit_obj.max_devices = int(max_devices)
+        limit_obj.save()
+        audit_log(request, 'update_device_limit', username, {'max_devices': int(max_devices)})
+        return Response({'max_devices': limit_obj.max_devices})
+
+
+class UserDeviceDeleteView(APIView):
+    """
+    DELETE /sessions/devices/<username>/<mac>/ – odstrání zariadenie z registra
+    (používateľ sa môže pripojiť s novým zariadením na uvoľnený slot)
+    """
+    permission_classes = [IsAdmin]
+
+    def delete(self, request, username, mac):
+        deleted, _ = UserDevice.objects.filter(username=username, mac_address=mac).delete()
+        if not deleted:
+            return Response({'detail': 'Zariadenie nenájdené.'}, status=404)
+        audit_log(request, 'delete_user_device', username, {'mac': mac})
+        return Response(status=204)
