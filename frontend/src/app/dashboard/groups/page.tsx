@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { api, type GroupInfo, type LDAPUser } from '@/lib/api'
+import { VlanInfoButton } from '@/components/VlanInfoButton'
 
 const VLAN_COLORS: Record<number, string> = {
   10: 'bg-blue-100 text-blue-700',
@@ -17,6 +18,7 @@ export default function GroupsPage() {
   const [moving, setMoving] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<GroupInfo | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -81,7 +83,7 @@ export default function GroupsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Skupiny</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{groups.reduce((s, g) => s + g.member_count, 0)} používateľov celkom</span>
+          
           <button
             onClick={() => setShowCreate(true)}
             className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
@@ -110,6 +112,12 @@ export default function GroupsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setEditing(group)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                >
+                  Upraviť
+                </button>
                 {group.member_count === 0 && (
                   <button
                     onClick={() => {
@@ -159,6 +167,17 @@ export default function GroupsPage() {
           }}
         />
       )}
+
+      {editing && (
+        <EditGroupModal
+          group={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(updated) => {
+            setGroups((prev) => prev.map((g) => g.name === updated.name ? { ...g, ...updated } : g))
+            setEditing(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -197,6 +216,96 @@ function MemberRow({
           <option key={g.name} value={g.name}>{g.label}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+function EditGroupModal({
+  group,
+  onClose,
+  onSaved,
+}: {
+  group: GroupInfo
+  onClose: () => void
+  onSaved: (group: Pick<GroupInfo, 'name' | 'label' | 'vlan'>) => void
+}) {
+  const [label, setLabel] = useState(group.label)
+  const [vlan, setVlan] = useState(String(group.vlan))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      const updated = await api.patch<Pick<GroupInfo, 'name' | 'label' | 'vlan'>>(
+        `/users/groups/${group.name}/`,
+        { label: label.trim(), vlan: parseInt(vlan, 10) },
+      )
+      onSaved(updated)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Chyba')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-bold text-gray-900 mb-1">Upraviť skupinu</h2>
+        <p className="text-xs text-gray-400 mb-4">{group.name}</p>
+        <form onSubmit={submit} className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Zobrazovaný názov</label>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              required
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <label className="text-xs font-medium text-gray-600">VLAN</label>
+              <VlanInfoButton />
+            </div>
+            <input
+              type="number"
+              value={vlan}
+              onChange={(e) => setVlan(e.target.value)}
+              min={1}
+              max={4094}
+              required
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {group.vlan !== parseInt(vlan, 10) && !isNaN(parseInt(vlan, 10)) && (
+              <p className="text-xs text-amber-600 mt-0.5">
+                VLAN sa zmení pre všetkých {group.member_count} členov skupiny.
+              </p>
+            )}
+          </div>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Zrušiť
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {saving ? 'Ukladám...' : 'Uložiť'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -262,7 +371,10 @@ function CreateGroupModal({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">VLAN</label>
+            <div className="flex items-center gap-1.5 mb-1">
+              <label className="text-xs font-medium text-gray-600">VLAN</label>
+              <VlanInfoButton />
+            </div>
             <input
               type="number"
               value={vlan}

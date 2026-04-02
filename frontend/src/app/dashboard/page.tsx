@@ -27,32 +27,16 @@ export default function DashboardPage() {
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Prehľad</h1>
-        <p className="text-sm text-gray-500 mt-1">WiFi sieť Oratko – WPA2 Enterprise</p>
+        <p className="text-sm text-gray-500 mt-1">WiFi sieť Oratko </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard
-          label="Aktívne pripojenia"
-          value={loading ? '…' : String(live.length)}
-          color="blue"
-        />
-        <StatCard
-          label="SSID"
-          value="Oratko"
-          color="green"
-        />
-        <StatCard
-          label="Autentifikácia"
-          value="PEAP/MSCHAPv2"
-          color="purple"
-        />
-      </div>
+  
+      
 
       {/* Live tabuľka */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-          <h2 className="font-medium text-gray-900">Práve pripojení</h2>
+          <h2 className="font-medium text-gray-900">Práve pripojení ({loading ? '…' : String(live.length)})</h2>
           <span className="text-xs text-gray-400">Aktualizuje sa každých 30s</span>
         </div>
         {loading ? (

@@ -38,6 +38,15 @@
 
 @layer components {
   .input {
-    @apply w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    min-height: 44px;
+  }
+  .btn-icon {
+    @apply flex items-center justify-center rounded-lg text-sm transition-colors;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .skeleton {
+    @apply animate-pulse rounded bg-gray-100;
   }
 }

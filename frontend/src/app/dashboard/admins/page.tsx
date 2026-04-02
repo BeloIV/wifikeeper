@@ -1,25 +1,42 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { api, type User, ROLE_LABELS } from '@/lib/api'
+import { useRouter } from 'next/navigation'
+import { api, type User, type AuditLog, ROLE_LABELS } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 
 export default function AdminsPage() {
+  const router = useRouter()
+  const [authorized, setAuthorized] = useState(false)
   const [admins, setAdmins] = useState<User[]>([])
-  const [auditLogs, setAuditLogs] = useState<any[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'admins' | 'audit'>('admins')
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ username: '', password: '', first_name: '', last_name: '', email: '', role: 'admin' as User['role'] })
+  const [form, setForm] = useState({ email: '', role: 'admin' as User['role'] })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [inviteSent, setInviteSent] = useState(false)
+
+  // Ochrana: len superadmin môže vidieť túto stránku
+  useEffect(() => {
+    api.get<User>('/admins/me/').then((u) => {
+      if (u.role !== 'superadmin') {
+        router.replace('/dashboard')
+      } else {
+        setAuthorized(true)
+      }
+    }).catch(() => router.replace('/login'))
+  }, [router])
 
   const loadAdmins = useCallback(() => {
-    api.get<any>('/admins').then((d) => setAdmins(d.results ?? d)).finally(() => setLoading(false))
+    api.get<{ results: User[] } | User[]>('/admins').then((d) => {
+      setAdmins((d as { results: User[] }).results ?? (d as User[]))
+    }).finally(() => setLoading(false))
   }, [])
 
   const loadAudit = useCallback(() => {
-    api.get<any>('/audit/').then((d) => setAuditLogs(d.results || []))
+    api.get<{ results: AuditLog[] }>('/audit/').then((d) => setAuditLogs(d.results || []))
   }, [])
 
   useEffect(() => {
@@ -27,14 +44,12 @@ export default function AdminsPage() {
     else loadAudit()
   }, [tab, loadAdmins, loadAudit])
 
-  async function createAdmin() {
+  async function sendInvitation() {
     setSaving(true)
     setError('')
     try {
-      await api.post('/admins/', form)
-      setShowCreate(false)
-      setForm({ username: '', password: '', first_name: '', last_name: '', email: '', role: 'admin' })
-      loadAdmins()
+      await api.post('/admins/invitations/', form)
+      setInviteSent(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Chyba')
     } finally {
@@ -42,11 +57,20 @@ export default function AdminsPage() {
     }
   }
 
+  function closeCreate() {
+    setShowCreate(false)
+    setError('')
+    setInviteSent(false)
+    setForm({ email: '', role: 'admin' })
+  }
+
   async function deleteAdmin(id: number, username: string) {
     if (!confirm(`Zmazať admina ${username}?`)) return
     await api.delete(`/admins/${id}/`)
     loadAdmins()
   }
+
+  if (!authorized) return null
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -106,7 +130,7 @@ export default function AdminsPage() {
                       </div>
                       <div className="text-xs text-gray-400">
                         {admin.email && `${admin.email} · `}
-                        Posledné prihlásenie: {formatDate(admin.last_login as unknown as string)}
+                        Posledné prihlásenie: {formatDate(admin.last_login ?? null)}
                       </div>
                     </div>
                     <button
@@ -126,7 +150,7 @@ export default function AdminsPage() {
           <div className="divide-y divide-gray-50">
             {auditLogs.length === 0 ? (
               <div className="p-8 text-center text-gray-400 text-sm">Žiadne záznamy</div>
-            ) : auditLogs.map((log: any) => (
+            ) : auditLogs.map((log) => (
               <div key={log.id} className="px-4 py-2.5 flex items-start gap-3 text-sm">
                 <span className="text-xs text-gray-300 flex-shrink-0 pt-0.5 w-32 text-right">
                   {formatDate(log.timestamp)}
@@ -148,52 +172,61 @@ export default function AdminsPage() {
         </div>
       )}
 
-      {/* Modal – vytvorenie admina */}
+      {/* Modal – pozvánka admina */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/30">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">Nový admin</h3>
-              <button onClick={() => { setShowCreate(false); setError('') }} className="text-gray-400 hover:text-gray-600 p-1">✕</button>
+              <h3 className="font-semibold text-gray-900">Pozvať admina</h3>
+              <button onClick={closeCreate} className="text-gray-400 hover:text-gray-600 p-1">✕</button>
             </div>
             <div className="p-5 space-y-3">
-              {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Meno (login)</label>
-                <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="input" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Heslo</label>
-                <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input" />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Meno</label>
-                  <input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="input" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Priezvisko</label>
-                  <input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="input" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Rola</label>
-                <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })} className="input">
-                  {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={createAdmin} disabled={saving} className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50">
-                  {saving ? 'Ukladám...' : 'Vytvoriť'}
-                </button>
-                <button onClick={() => { setShowCreate(false); setError('') }} className="px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                  Zrušiť
-                </button>
-              </div>
+              {inviteSent ? (
+                <>
+                  <div className="text-sm text-green-700 bg-green-50 border border-green-200 px-4 py-3 rounded-xl">
+                    Pozvánka bola odoslaná na <strong>{form.email}</strong>. Odkaz je platný 7 dní.
+                  </div>
+                  <button onClick={closeCreate} className="w-full bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700">
+                    Zavrieť
+                  </button>
+                </>
+              ) : (
+                <>
+                  {error && <div className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</div>}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Email pozvaného</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className="input"
+                      placeholder="admin@priklad.sk"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Rola</label>
+                    <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as User['role'] })} className="input">
+                      {Object.entries(ROLE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Pozvaný dostane email s odkazom na registráciu (platný 7 dní). Účet si vytvorí sám.
+                  </p>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={sendInvitation}
+                      disabled={saving || !form.email}
+                      className="flex-1 bg-blue-600 text-white text-sm py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saving ? 'Odosielam...' : 'Odoslať pozvánku'}
+                    </button>
+                    <button onClick={closeCreate} className="px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                      Zrušiť
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

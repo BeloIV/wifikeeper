@@ -15,22 +15,19 @@ export default function HistoryPage() {
   const [data, setData] = useState<PaginatedResponse<RadiusSession> | null>(null)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [showSearch, setShowSearch] = useState(false)
   const [filters, setFilters] = useState({
-    username: '',
-    ssid: '',
+    search: '',
     date_from: '',
     date_to: '',
-    search: '',
   })
 
   const load = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams({ page: String(page) })
-    if (filters.username) params.set('username', filters.username)
-    if (filters.ssid) params.set('ssid', filters.ssid)
+    if (filters.search) params.set('search', filters.search)
     if (filters.date_from) params.set('date_from', filters.date_from)
     if (filters.date_to) params.set('date_to', filters.date_to)
-    if (filters.search) params.set('search', filters.search)
     api.get<PaginatedResponse<RadiusSession>>(`/sessions/history/?${params}`)
       .then(setData)
       .finally(() => setLoading(false))
@@ -46,54 +43,72 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4 max-w-5xl">
-      <h1 className="text-xl font-bold text-gray-900">História pripojení</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">História pripojení</h1>
+        <button
+          onClick={() => setShowSearch(!showSearch)}
+          title="Hľadať a filtrovať"
+          className={`relative btn-icon border transition-colors ${
+            showSearch || filters.search || filters.date_from || filters.date_to
+              ? 'border-blue-500 bg-blue-50 text-blue-700'
+              : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <span>🔍</span>
+          {(filters.search || filters.date_from || filters.date_to) && (
+            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-600" />
+          )}
+        </button>
+      </div>
 
       {/* Filtre */}
-      <form onSubmit={applyFilters} className="bg-white rounded-xl border border-gray-100 p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {showSearch && (
+        <form onSubmit={applyFilters} className="bg-white rounded-xl border border-gray-100 p-4 space-y-2">
           <input
             type="search"
-            placeholder="Hľadať..."
+            placeholder="Hľadať – meno, login, MAC adresa, IP..."
             value={filters.search}
             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="input col-span-2 sm:col-span-1"
-          />
-          <input
-            placeholder="Používateľ"
-            value={filters.username}
-            onChange={(e) => setFilters({ ...filters, username: e.target.value })}
             className="input"
           />
-          <input
-            placeholder="SSID"
-            value={filters.ssid}
-            onChange={(e) => setFilters({ ...filters, ssid: e.target.value })}
-            className="input"
-          />
-          <input
-            type="date"
-            value={filters.date_from}
-            onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
-            className="input"
-            title="Dátum od"
-          />
-          <input
-            type="date"
-            value={filters.date_to}
-            onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
-            className="input"
-            title="Dátum do"
-          />
-          <button type="submit" className="bg-blue-600 text-white text-sm py-2 px-4 rounded-lg hover:bg-blue-700">
-            Filtrovať
-          </button>
-        </div>
-      </form>
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              type="date"
+              value={filters.date_from}
+              onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+              className="input flex-1"
+              title="Dátum od"
+            />
+            <span className="text-gray-400 text-sm flex-shrink-0">–</span>
+            <input
+              type="date"
+              value={filters.date_to}
+              onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
+              className="input flex-1"
+              title="Dátum do"
+            />
+            <button type="submit" className="bg-blue-600 text-white text-sm py-2.5 px-4 rounded-lg hover:bg-blue-700 flex-shrink-0" style={{ minHeight: 44 }}>
+              Hľadať
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Výsledky */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400 text-sm">Načítavam...</div>
+          <div className="divide-y divide-gray-50">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="px-4 py-3 flex items-start gap-3">
+                <div className="skeleton w-2 h-2 rounded-full mt-2 flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="skeleton h-3.5 w-40" />
+                  <div className="skeleton h-3 w-64" />
+                  <div className="skeleton h-3 w-48" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : !data || data.results.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Žiadne záznamy</div>
         ) : (
@@ -134,21 +149,25 @@ export default function HistoryPage() {
             </div>
 
             {/* Stránkovanie */}
-            <div className="px-4 py-3 border-t border-gray-50 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-gray-50 flex items-center justify-between gap-2">
               <button
                 disabled={!data.previous}
                 onClick={() => setPage(page - 1)}
-                className="text-sm px-3 py-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                className="text-sm px-4 py-2.5 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                style={{ minHeight: 44 }}
               >
-                ← Predchádzajúca
+                ← Späť
               </button>
-              <span className="text-xs text-gray-400">Strana {page}</span>
+              <span className="text-xs text-gray-400">
+                Strana {page} z {Math.ceil(data.count / 20) || 1}
+              </span>
               <button
                 disabled={!data.next}
                 onClick={() => setPage(page + 1)}
-                className="text-sm px-3 py-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                className="text-sm px-4 py-2.5 rounded-lg hover:bg-gray-100 disabled:opacity-40"
+                style={{ minHeight: 44 }}
               >
-                Ďalšia →
+                Ďalej →
               </button>
             </div>
           </>

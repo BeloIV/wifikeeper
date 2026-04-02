@@ -6,27 +6,21 @@ import Link from 'next/link'
 import { api, logout, type User } from '@/lib/api'
 
 const NAV = [
-  { href: '/dashboard', label: 'Prehľad', icon: '🏠' },
-  { href: '/dashboard/users', label: 'Používatelia', icon: '👥' },
-  { href: '/dashboard/groups', label: 'Skupiny', icon: '🏷️' },
-  { href: '/dashboard/keys', label: 'Kľúče', icon: '🔑' },
-  { href: '/dashboard/live', label: 'Live', icon: '📡' },
-  { href: '/dashboard/history', label: 'História', icon: '📋' },
-  { href: '/dashboard/admins', label: 'Admini', icon: '⚙️' },
+  { href: '/dashboard', label: 'Prehľad', short: 'Prehľad', icon: '🏠' },
+  { href: '/dashboard/users', label: 'Používatelia', short: 'Ľudia', icon: '👥' },
+  { href: '/dashboard/groups', label: 'Skupiny', short: 'Skupiny', icon: '🗂️' },
+  { href: '/dashboard/keys', label: 'Kľúče', short: 'Kľúče', icon: '🔑' },
+  { href: '/dashboard/live', label: 'Live', short: 'Live', icon: '📶' },
+  { href: '/dashboard/history', label: 'História', short: 'Hist.', icon: '📋' },
+  { href: '/dashboard/admins', label: 'Admini', short: 'Admin', icon: '⚙️', superadminOnly: true },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
-  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
-    if (!token) {
-      router.push('/login')
-      return
-    }
     api.get<User>('/admins/me/').then(setUser).catch(() => {
       router.push('/login')
     })
@@ -45,17 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-40">
         <div className="flex items-center justify-between px-4 h-14">
-          <div className="flex items-center gap-3">
-            <button
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
-              onClick={() => setMenuOpen(!menuOpen)}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <span className="font-semibold text-gray-900">WiFi Manager</span>
-          </div>
+          <span className="font-semibold text-gray-900">WiFi Manager</span>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500 hidden sm:block">
               {user.first_name || user.username}
@@ -73,7 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex flex-1">
         {/* Sidebar – desktop */}
         <nav className="hidden md:flex flex-col w-56 bg-white border-r border-gray-100 p-3 gap-1">
-          {NAV.map((item) => {
+          {NAV.filter((item) => !item.superadminOnly || user.role === 'superadmin').map((item) => {
             const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
             return (
               <Link
@@ -92,31 +76,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Mobile menu */}
-        {menuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <div className="absolute inset-0 bg-black/20" onClick={() => setMenuOpen(false)} />
-            <nav className="absolute left-0 top-0 h-full w-64 bg-white shadow-xl p-4 pt-16 flex flex-col gap-1">
-              {NAV.map((item) => {
-                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMenuOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${
-                      active ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span>{item.icon}</span>
-                    {item.label}
-                  </Link>
-                )
-              })}
-            </nav>
-          </div>
-        )}
-
         {/* Hlavný obsah */}
         <main className="flex-1 p-4 md:p-6 overflow-auto">
           {children}
@@ -124,25 +83,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* Bottom nav – mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex z-40">
-        {NAV.slice(0, 6).map((item) => {
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex z-40"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {NAV.filter((item) => !item.superadminOnly || user.role === 'superadmin').map((item) => {
           const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs ${
+              className={`flex-1 flex flex-col items-center justify-center py-1 gap-0.5 ${
                 active ? 'text-blue-600' : 'text-gray-400'
               }`}
+              style={{ minHeight: 52 }}
             >
-              <span className="text-lg leading-none">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="text-xl leading-none">{item.icon}</span>
+              <span style={{ fontSize: 9 }} className="leading-tight font-medium">{item.short}</span>
             </Link>
           )
         })}
       </nav>
 
-      <div className="h-16 md:hidden" />
+      <div className="md:hidden" style={{ height: 'calc(52px + env(safe-area-inset-bottom))' }} />
     </div>
   )
 }
