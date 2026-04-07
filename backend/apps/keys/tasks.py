@@ -10,12 +10,13 @@ import qrcode
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from email.mime.image import MIMEImage
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
 
-def _generate_wifi_qr_base64(ssid: str, password: str) -> str:
+def _generate_wifi_qr_bytes(ssid: str, password: str) -> bytes:
     wifi_string = f'WIFI:T:WPA;S:{ssid};P:{password};;'
     qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
     qr.add_data(wifi_string)
@@ -23,7 +24,7 @@ def _generate_wifi_qr_base64(ssid: str, password: str) -> str:
     img = qr.make_image(fill_color='black', back_color='white')
     buf = io.BytesIO()
     img.save(buf, format='PNG')
-    return base64.b64encode(buf.getvalue()).decode()
+    return buf.getvalue()
 
 
 
@@ -90,13 +91,11 @@ def cleanup_expired_keys_safe():
 
 
 def _coa_disconnect_user(username: str) -> int:
-    """Odošle CoA Disconnect-Request pre všetky aktívne RADIUS sessions daného používateľa."""
-    import re
-    import subprocess
-    from django.conf import settings
+    """SSH deauth pre všetky aktívne RADIUS sessions daného používateľa."""
     from apps.sessions.models import RadiusSession
+    from apps.sessions.utils import ssh_deauth_mac
+    from django.utils import timezone
 
-    secret = settings.RADIUS_COA_SECRET
     sessions = RadiusSession.objects.filter(
         username=username,
         acct_stop_time__isnull=True,
@@ -105,24 +104,13 @@ def _coa_disconnect_user(username: str) -> int:
     disconnected = 0
     for session in sessions:
         nas_ip = str(session.nas_ip_address)
-        if not re.fullmatch(r'[A-Fa-f0-9\-]{8,64}', session.acct_session_id):
-            logger.warning(f'CoA: neplatný acct_session_id pre {username}, preskakujem')
-            continue
-        cmd = ['radclient', '-x', f'{nas_ip}:3799', 'disconnect', secret]
-        input_data = (
-            f'Acct-Session-Id = {session.acct_session_id}\n'
-            f'User-Name = {username}\n'
-            f'NAS-IP-Address = {nas_ip}\n'
-        )
-        try:
-            result = subprocess.run(cmd, input=input_data, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                disconnected += 1
-                logger.info(f'CoA: odpojený {username} zo {nas_ip}')
-            else:
-                logger.warning(f'CoA zlyhalo pre {username} na {nas_ip}: {result.stderr.strip()}')
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            logger.warning(f'CoA výnimka pre {username} na {nas_ip}: {e}')
+        kicked = ssh_deauth_mac(nas_ip, session.calling_station_id)
+        session.acct_stop_time = timezone.now()
+        session.acct_terminate_cause = 'Admin-Reset'
+        session.save(update_fields=['acct_stop_time', 'acct_terminate_cause'])
+        if kicked:
+            disconnected += 1
+            logger.info(f'SSH deauth: odpojený {username} zo {nas_ip}')
 
     return disconnected
 
@@ -200,7 +188,7 @@ def send_key_email(key_id: str, recipient_email: str):
         validity_label = 'Časový'
         validity_desc = f'do {timezone.localtime(key.expires_at).strftime("%d.%m.%Y %H:%M")}'
 
-    qr_b64 = _generate_wifi_qr_base64(ssid, password)
+    qr_bytes = _generate_wifi_qr_bytes(ssid, password)
 
     text_body = (
         f'Dobrý deň,\n\n'
@@ -209,8 +197,15 @@ def send_key_email(key_id: str, recipient_email: str):
         f'  Login:    {key.ldap_username}\n'
         f'  Heslo:    {password}\n'
         f'  Platnosť: {validity_label} – {validity_desc}\n\n'
-        f'iOS: otvorte priloženú prílohu oratko-wifi.mobileconfig\n'
-        f'Android: naskenujte QR kód fotoaparátom\n\n'
+        f'iOS:\n'
+        f'  Vyberte sieť {ssid} → zobrazí sa certifikát → klepnite "Dôverovať".\n\n'
+        f'Android:\n'
+        f'  Vyberte sieť {ssid}, nastavte:\n'
+        f'    EAP metóda: PEAP\n'
+        f'    Fáza 2: MSCHAPV2\n'
+        f'    Certifikát CA: Neoverovat / Do not validate\n'
+        f'    Identita: {key.ldap_username}\n'
+        f'    Heslo: {password}\n\n'
         f'Ak máte problém s pripojením, kontaktujte nás na {support}.\n\n'
         f'Saleziánske oratórium Prešov'
     )
@@ -271,18 +266,49 @@ def send_key_email(key_id: str, recipient_email: str):
                 </tr>
               </table>
 
+              <!-- iOS instructions -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+                <tr>
+                  <td style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;">
+                    <p style="margin:0 0 8px;color:#166534;font-size:13px;font-weight:700;">🍎 iPhone / iPad (iOS)</p>
+                    <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">
+                      1. Otvorte <strong>Nastavenia → Wi-Fi</strong><br>
+                      2. Vyberte sieť <strong>{ssid}</strong><br>
+                      3. Zadajte login a heslo<br>
+                      4. Zobrazí sa certifikát servera → klepnite <strong>Dôverovať</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Android instructions -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px 20px;">
+                    <p style="margin:0 0 8px;color:#854d0e;font-size:13px;font-weight:700;">🤖 Android</p>
+                    <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">
+                      1. Otvorte <strong>Nastavenia → Wi-Fi</strong><br>
+                      2. Vyberte sieť <strong>{ssid}</strong><br>
+                      3. Nastavte:<br>
+                      &nbsp;&nbsp;&nbsp;• EAP metóda: <strong>PEAP</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Fáza 2: <strong>MSCHAPV2</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Certifikát CA: <strong>Neoverovat</strong> (Do not validate)<br>
+                      &nbsp;&nbsp;&nbsp;• Identita: <strong>{key.ldap_username}</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Heslo: <strong>{password}</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
               <!-- QR code -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
                 <tr>
                   <td align="center">
-                    <p style="margin:0 0 12px;color:#374151;font-size:13px;font-weight:600;">QR kód pre automatické pripojenie</p>
-                    <img src="data:image/png;base64,{qr_b64}"
+                    <p style="margin:0 0 8px;color:#6b7280;font-size:12px;">QR kód (iOS – naskenuj fotoaparátom pre rýchle pripojenie)</p>
+                    <img src="cid:wifi_qr"
                          alt="WiFi QR kód"
-                         width="180" height="180"
+                         width="160" height="160"
                          style="border-radius:8px;border:1px solid #e5e7eb;" />
-                    <p style="margin:8px 0 0;color:#9ca3af;font-size:11px;">
-                      iOS 11+ a Android 10+: naskenuj fotoaparátom → automaticky sa pripojí
-                    </p>
                   </td>
                 </tr>
               </table>
@@ -315,7 +341,12 @@ def send_key_email(key_id: str, recipient_email: str):
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient_email],
         )
+        msg.mixed_subtype = 'related'
         msg.attach_alternative(html_body, 'text/html')
+        qr_image = MIMEImage(qr_bytes)
+        qr_image.add_header('Content-ID', '<wifi_qr>')
+        qr_image.add_header('Content-Disposition', 'inline', filename='qr.png')
+        msg.attach(qr_image)
         msg.send()
 
         key.email_sent_to = recipient_email

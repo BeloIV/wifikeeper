@@ -1,6 +1,6 @@
 import re
 import socket
-import subprocess
+import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,6 +8,7 @@ from django.db.models import Q
 
 from apps.panel_users.permissions import IsAdminOrReadOnly, IsAdmin
 from apps.audit.utils import audit_log
+from .utils import ssh_deauth_mac
 from .models import RadiusSession, UserDevice, UserDeviceLimit
 from .serializers import RadiusSessionSerializer
 
@@ -53,39 +54,24 @@ class DisconnectUserView(APIView):
         if not re.fullmatch(r'[a-zA-Z0-9._@\-]{1,64}', username):
             return Response({'detail': 'Neplatný formát username.'}, status=500)
 
-        # Pošli CoA Disconnect-Request cez radclient
-        from django.conf import settings
-        radius_secret = settings.RADIUS_COA_SECRET  # Chýbajúci env var = fail loud (C4)
+        # SSH deauth — okamžité odpojenie cez hostapd_cli
+        kicked = ssh_deauth_mac(nas_ip, session.calling_station_id)
 
-        cmd = [
-            'radclient', '-x',
-            f'{nas_ip}:3799',
-            'disconnect',
-            radius_secret,
-        ]
-        input_data = (
-            f'Acct-Session-Id = {session.acct_session_id}\n'
-            f'User-Name = {username}\n'
-            f'NAS-IP-Address = {nas_ip}\n'
-        )
+        # Označ session ako ukončenú v DB
+        from django.utils import timezone
+        session.acct_stop_time = timezone.now()
+        session.acct_terminate_cause = 'Admin-Reset'
+        session.save(update_fields=['acct_stop_time', 'acct_terminate_cause'])
 
+        # Zablokuj používateľa (LDAP disabled + zmaž radreply) – zabrání opätovnému pripojeniu
+        from apps.users import ldap_service as ldap
         try:
-            result = subprocess.run(
-                cmd,
-                input=input_data,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            success = result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-            return Response({'detail': f'Chyba pri CoA: {e}'}, status=500)
+            ldap.set_active(username, False)
+        except Exception as exc:
+            logger.warning(f'Nepodarilo sa zablokovať LDAP účet {username}: {exc}')
 
-        if success:
-            audit_log(request, 'disconnect_user', username, {'session_id': session_id, 'nas_ip': nas_ip})
-            return Response({'detail': f'Používateľ {username} odpojený.'})
-        else:
-            return Response({'detail': f'CoA zlyhalo: {result.stderr}'}, status=500)
+        audit_log(request, 'disconnect_user', username, {'session_id': session_id, 'nas_ip': nas_ip, 'kicked': kicked})
+        return Response({'detail': f'Používateľ {username} odpojený a zablokovaný.'})
 
 
 class SessionHistoryView(APIView):

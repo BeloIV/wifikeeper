@@ -83,7 +83,7 @@ class UserDevice(models.Model):
     """Historicky registrované WiFi zariadenia používateľa (podľa MAC adresy)."""
     username = models.CharField(max_length=64, db_index=True)
     mac_address = models.CharField(max_length=50, verbose_name='MAC adresa')
-    label = models.CharField(max_length=100, blank=True, verbose_name='Popis zariadenia')
+    label = models.CharField(max_length=100, blank=True, default='', verbose_name='Popis zariadenia')
     first_seen = models.DateTimeField(auto_now_add=True, verbose_name='Prvé pripojenie')
     last_seen = models.DateTimeField(auto_now=True, verbose_name='Posledné pripojenie')
 
