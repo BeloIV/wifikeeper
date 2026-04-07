@@ -46,6 +46,15 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
         f'  Login:  {username}\n'
         f'  Heslo:  {password}\n\n'
         f'UPOZORNENIE: Heslo je vygenerované výhradne pre vás. Je zakázané ho zdieľať s inými osobami.\n\n'
+        f'iOS:\n'
+        f'  Vyberte sieť Oratko → zadajte login a heslo → klepnite "Dôverovať" na certifikát.\n\n'
+        f'Android:\n'
+        f'  Vyberte sieť Oratko, nastavte:\n'
+        f'    EAP metóda: PEAP\n'
+        f'    Fáza 2: MSCHAPV2\n'
+        f'    Certifikát CA: Neoverovat / Do not validate\n'
+        f'    Identita: {username}\n'
+        f'    Heslo: {password}\n\n'
         f'Ak máte problém s pripojením, kontaktujte nás na {support}.\n\n'
         f'Saleziánske oratórium Prešov'
     )
@@ -103,11 +112,45 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
               </table>
 
               <!-- No-sharing warning -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin-bottom:20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin-bottom:16px;">
                 <tr>
                   <td style="padding:12px 16px;">
                     <p style="margin:0;color:#92400e;font-size:13px;line-height:1.5;">
                       <strong>Upozornenie:</strong> Heslo je vygenerované výhradne pre vás. Je <strong>zakázané ho zdieľať</strong> s inými osobami.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- iOS instructions -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <td style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;">
+                    <p style="margin:0 0 8px;color:#166534;font-size:13px;font-weight:700;">🍎 iPhone / iPad (iOS)</p>
+                    <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">
+                      1. Otvorte <strong>Nastavenia → Wi-Fi</strong><br>
+                      2. Vyberte sieť <strong>Oratko</strong><br>
+                      3. Zadajte login a heslo<br>
+                      4. Zobrazí sa certifikát servera → klepnite <strong>Dôverovať</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Android instructions -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+                <tr>
+                  <td style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px 20px;">
+                    <p style="margin:0 0 8px;color:#854d0e;font-size:13px;font-weight:700;">🤖 Android</p>
+                    <p style="margin:0;color:#374151;font-size:13px;line-height:1.7;">
+                      1. Otvorte <strong>Nastavenia → Wi-Fi</strong><br>
+                      2. Vyberte sieť <strong>Oratko</strong><br>
+                      3. Nastavte:<br>
+                      &nbsp;&nbsp;&nbsp;• EAP metóda: <strong>PEAP</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Fáza 2: <strong>MSCHAPV2</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Certifikát CA: <strong>Neoverovat</strong> (Do not validate)<br>
+                      &nbsp;&nbsp;&nbsp;• Identita: <strong>{username}</strong><br>
+                      &nbsp;&nbsp;&nbsp;• Heslo: <strong>{password}</strong>
                     </p>
                   </td>
                 </tr>
