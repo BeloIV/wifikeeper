@@ -7,7 +7,7 @@ device_limit_policy {
     if (!&User-Name || !&Calling-Station-Id) {
         noop
     }
-    elsif ("%{sql:SELECT check_and_register_device('%{SQL-User-Name}', '%{Calling-Station-Id}')}" == "EXCEEDED") {
+    elsif ("%{sql:SELECT check_and_register_device('%{User-Name}', '%{Calling-Station-Id}')}" == "EXCEEDED") {
         update reply {
             Reply-Message := "Prekrocili ste limit povolenych zariadeni. Kontaktujte support alebo oslovte saleziana v oratku."
         }

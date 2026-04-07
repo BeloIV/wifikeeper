@@ -28,6 +28,13 @@ server default {
         digest
         suffix
         device_limit_policy
+        sql
+        if (notfound) {
+            update reply {
+                Reply-Message := "Pristup odmietnuty: pouzivatel nema povoleny pristup"
+            }
+            reject
+        }
         eap {
             ok = return
         }
@@ -37,7 +44,6 @@ server default {
                 Auth-Type := ldap
             }
         }
-        sql
         expiration
         logintime
     }

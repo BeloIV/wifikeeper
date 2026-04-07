@@ -11,12 +11,9 @@ server inner-tunnel {
         chap
         mschap
         suffix
+        eap
         ldap
-        if (ok || updated) {
-            update control {
-                Auth-Type := ldap
-            }
-        }
+        pap
         expiration
         logintime
     }
@@ -32,7 +29,6 @@ server inner-tunnel {
     }
 
     post-auth {
-        vlan_policy
         Post-Auth-Type REJECT {
             attr_filter.access_reject
         }

@@ -34,7 +34,7 @@ eap {
         ecdh_curve = "prime256v1"
 
         cache {
-            enable = yes
+            enable = no
             lifetime = 24
             max_entries = 255
         }
