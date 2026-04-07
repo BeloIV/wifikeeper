@@ -1,26 +1,12 @@
 """
 Celery tasky pre správu WiFi používateľov.
 """
-import base64
-import io
 import logging
 from celery import shared_task
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
-
-
-def _generate_wifi_qr_base64(ssid: str, password: str) -> str:
-    import qrcode
-    wifi_string = f'WIFI:T:WPA;S:{ssid};P:{password};;'
-    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-    qr.add_data(wifi_string)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color='black', back_color='white')
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return base64.b64encode(buf.getvalue()).decode()
 
 DEVICE_LIMIT = 2
 
@@ -32,12 +18,6 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
     """
     support = support_email or settings.ADMIN_EMAIL
     subject = 'Prístupové údaje na WiFi – Oratko'
-
-    try:
-        qr_b64 = _generate_wifi_qr_base64('Oratko', password)
-        qr_html = f'<tr><td style="padding:24px 32px 0;text-align:center;"><img src="data:image/png;base64,{qr_b64}" width="180" height="180" alt="QR kód WiFi" style="display:block;margin:0 auto;border-radius:8px;"/><p style="margin:8px 0 0;color:#6b7280;font-size:12px;">Naskenuj QR kód pre automatické pripojenie</p></td></tr>'
-    except Exception:
-        qr_html = ''
 
     text_body = (
         f'Dobrý deň,\n\n'
@@ -162,9 +142,6 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
               </p>
             </td>
           </tr>
-
-          <!-- QR code -->
-          {qr_html}
 
           <!-- Footer -->
           <tr>

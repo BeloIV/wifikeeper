@@ -1,30 +1,15 @@
 """
 Celery tasky pre správu dočasných kľúčov.
 """
-import base64
-import io
 import logging
 from datetime import timedelta
 
-import qrcode
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
-from email.mime.image import MIMEImage
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
-
-
-def _generate_wifi_qr_bytes(ssid: str, password: str) -> bytes:
-    wifi_string = f'WIFI:T:WPA;S:{ssid};P:{password};;'
-    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
-    qr.add_data(wifi_string)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color='black', back_color='white')
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return buf.getvalue()
 
 
 
@@ -188,8 +173,6 @@ def send_key_email(key_id: str, recipient_email: str):
         validity_label = 'Časový'
         validity_desc = f'do {timezone.localtime(key.expires_at).strftime("%d.%m.%Y %H:%M")}'
 
-    qr_bytes = _generate_wifi_qr_bytes(ssid, password)
-
     text_body = (
         f'Dobrý deň,\n\n'
         f'Bol vám vytvorený prístup na WiFi sieť {ssid}.\n\n'
@@ -239,7 +222,7 @@ def send_key_email(key_id: str, recipient_email: str):
               </p>
 
               <!-- Credentials -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;border:1px solid #c7d7fd;border-radius:8px;margin-bottom:8px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;border:1px solid #c7d7fd;border-radius:8px;margin-bottom:20px;">
                 <tr>
                   <td style="padding:20px 24px;">
                     <table width="100%" cellpadding="0" cellspacing="0">
@@ -300,19 +283,6 @@ def send_key_email(key_id: str, recipient_email: str):
                 </tr>
               </table>
 
-              <!-- QR code -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
-                <tr>
-                  <td align="center">
-                    <p style="margin:0 0 8px;color:#6b7280;font-size:12px;">QR kód (iOS – naskenuj fotoaparátom pre rýchle pripojenie)</p>
-                    <img src="cid:wifi_qr"
-                         alt="WiFi QR kód"
-                         width="160" height="160"
-                         style="border-radius:8px;border:1px solid #e5e7eb;" />
-                  </td>
-                </tr>
-              </table>
-
               <p style="margin:0;color:#6b7280;font-size:13px;line-height:1.6;">
                 Ak máte problém s pripojením, kontaktujte nás na
                 <a href="mailto:{support}" style="color:#1d4ed8;text-decoration:none;">{support}</a>.
@@ -341,12 +311,7 @@ def send_key_email(key_id: str, recipient_email: str):
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient_email],
         )
-        msg.mixed_subtype = 'related'
         msg.attach_alternative(html_body, 'text/html')
-        qr_image = MIMEImage(qr_bytes)
-        qr_image.add_header('Content-ID', '<wifi_qr>')
-        qr_image.add_header('Content-Disposition', 'inline', filename='qr.png')
-        msg.attach(qr_image)
         msg.send()
 
         key.email_sent_to = recipient_email
