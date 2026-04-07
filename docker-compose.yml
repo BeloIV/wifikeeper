@@ -139,6 +139,8 @@ services:
       EMAIL_USE_TLS: "True"
       MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      AP_SSH_USER: ${AP_SSH_USER}
+      AP_SSH_PASSWORD: ${AP_SSH_PASSWORD}
     command: >
       sh -c "python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
@@ -173,6 +175,8 @@ services:
       EMAIL_USE_TLS: "True"
       MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      AP_SSH_USER: ${AP_SSH_USER}
+      AP_SSH_PASSWORD: ${AP_SSH_PASSWORD}
     command: celery -A config worker -l info
 
   celery-beat:
@@ -205,6 +209,8 @@ services:
       EMAIL_USE_TLS: "True"
       MAIL_FROM: ${MAIL_FROM}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      AP_SSH_USER: ${AP_SSH_USER}
+      AP_SSH_PASSWORD: ${AP_SSH_PASSWORD}
     command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
   frontend:

@@ -15,3 +15,4 @@ python-dotenv==1.0.1
 gunicorn==21.2.0
 cryptography==42.0.8
 pycryptodome==3.20.0
+paramiko>=3.4

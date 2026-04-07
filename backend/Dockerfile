@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsasl2-dev \
     libldap2-dev \
     libssl-dev \
+    freeradius-utils \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

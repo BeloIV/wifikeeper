@@ -12,6 +12,8 @@ SECRET_KEY = os.environ['SECRET_KEY']
 FIELD_ENCRYPTION_KEY = os.environ['FIELD_ENCRYPTION_KEY']
 # RADIUS CoA shared secret – musí súhlasiť s NAS (UniFi AP).
 RADIUS_COA_SECRET = os.environ['RADIUS_COA_SECRET']
+AP_SSH_USER = os.environ.get('AP_SSH_USER', '')
+AP_SSH_PASSWORD = os.environ.get('AP_SSH_PASSWORD', '')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 APPEND_SLASH = False
