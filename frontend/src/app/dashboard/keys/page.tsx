@@ -25,6 +25,7 @@ export default function KeysPage() {
     max_uses: 1,
     email: '',
   })
+  const [maxUsesRaw, setMaxUsesRaw] = useState(String(form.max_uses))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [activeOnly, setActiveOnly] = useState(false)
@@ -77,7 +78,9 @@ export default function KeysPage() {
         }
       }
       if (form.key_type === 'multi_use') {
-        body.max_uses = form.max_uses
+        const uses = parseInt(maxUsesRaw)
+        if (isNaN(uses) || uses < 1) { setError('Zadaj platný počet prihlásení (min. 1).'); setSaving(false); return }
+        body.max_uses = uses
       }
       const created = await api.post<TempKey>('/keys/', body)
       setNewKey(created)
@@ -402,7 +405,7 @@ export default function KeysPage() {
                   {[1, 2, 5, 10, 20, 50].map((n) => (
                     <button
                       key={n}
-                      onClick={() => setForm({ ...form, max_uses: n })}
+                      onClick={() => { setForm({ ...form, max_uses: n }); setMaxUsesRaw(String(n)) }}
                       className={`flex-1 py-1.5 text-xs rounded-lg border ${
                         form.max_uses === n ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600'
                       }`}
@@ -412,10 +415,15 @@ export default function KeysPage() {
                   ))}
                   <input
                     type="number"
-                    min={2}
+                    min={1}
                     max={1000}
-                    value={form.max_uses}
-                    onChange={(e) => setForm({ ...form, max_uses: parseInt(e.target.value) || 2 })}
+                    value={maxUsesRaw}
+                    onChange={(e) => {
+                      setMaxUsesRaw(e.target.value)
+                      const n = parseInt(e.target.value)
+                      if (!isNaN(n) && n >= 1) setForm({ ...form, max_uses: n })
+                    }}
+
                     className="w-16 border border-gray-200 rounded-lg px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                 </div>

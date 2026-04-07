@@ -56,8 +56,7 @@
 
 
 
-## nastavenie ssh kluca na git 
-## tailsacale expose 
+
 
 
 
