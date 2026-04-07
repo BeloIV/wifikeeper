@@ -82,12 +82,18 @@ def _ssha_hash(password: str) -> str:
     return '{SSHA}' + base64.b64encode(digest + salt).decode()
 
 
+def _is_disabled(entry) -> bool:
+    """Vráti True ak má účet nastavený sambaAcctFlags s príznakom D (Disabled)."""
+    flags = str(entry.sambaAcctFlags) if entry.sambaAcctFlags else ''
+    return 'D' in flags
+
+
 def list_users() -> list[dict]:
     conn = _conn()
     conn.search(
         f'ou=users,{settings.LDAP_BASE_DN}',
         '(objectClass=inetOrgPerson)',
-        attributes=['uid', 'cn', 'givenName', 'sn', 'mail', 'pwdAccountLockedTime'],
+        attributes=['uid', 'cn', 'givenName', 'sn', 'mail', 'sambaAcctFlags'],
     )
     users = []
     for entry in conn.entries:
@@ -100,7 +106,7 @@ def list_users() -> list[dict]:
             'first_name': str(entry.givenName) if entry.givenName else '',
             'last_name': str(entry.sn) if entry.sn else '',
             'email': str(entry.mail) if entry.mail else '',
-            'disabled': bool(entry.pwdAccountLockedTime),
+            'disabled': _is_disabled(entry),
             'group': get_user_group(uid),
         })
     conn.unbind()
@@ -112,7 +118,7 @@ def get_user(username: str) -> dict | None:
     conn.search(
         f'ou=users,{settings.LDAP_BASE_DN}',
         f'(uid={escape_filter_chars(username)})',
-        attributes=['uid', 'cn', 'givenName', 'sn', 'mail', 'pwdAccountLockedTime'],
+        attributes=['uid', 'cn', 'givenName', 'sn', 'mail', 'sambaAcctFlags'],
     )
     if not conn.entries:
         conn.unbind()
@@ -125,7 +131,7 @@ def get_user(username: str) -> dict | None:
         'first_name': str(entry.givenName) if entry.givenName else '',
         'last_name': str(entry.sn) if entry.sn else '',
         'email': str(entry.mail) if entry.mail else '',
-        'disabled': bool(entry.pwdAccountLockedTime),
+        'disabled': _is_disabled(entry),
         'group': get_user_group(username),
     }
 
@@ -145,6 +151,7 @@ def create_user(username: str, password: str, first_name: str, last_name: str,
         'userPassword': _ssha_hash(password),
         'sambaNTPassword': nt,
         'sambaSID': f'S-1-5-21-{secrets.randbelow(2**32)}-500',
+        'sambaAcctFlags': '[U       ]',
     }
     conn.add(dn, attributes=attrs)
     if conn.result['result'] != 0:
@@ -206,12 +213,17 @@ def delete_user(username: str):
 
 
 def set_active(username: str, active: bool):
-    """Aktivuje alebo deaktivuje účet (pwdAccountLockedTime + radreply)."""
+    """Aktivuje alebo deaktivuje účet (sambaAcctFlags + radreply)."""
     conn = _conn()
     dn = _user_dn(username)
-    if active:
-        conn.modify(dn, {'pwdAccountLockedTime': [(MODIFY_DELETE, [])]})
+    flag = '[U       ]' if active else '[D       ]'
+    conn.modify(dn, {'sambaAcctFlags': [(MODIFY_REPLACE, [flag])]})
+    if conn.result['result'] != 0:
         conn.unbind()
+        raise LDAPException(f'Chyba pri zmene stavu účtu: {conn.result["description"]}')
+    conn.unbind()
+
+    if active:
         # Obnov VLAN — zisti skupinu a zapíš radreply
         group = get_user_group(username)
         if group:
@@ -220,8 +232,6 @@ def set_active(username: str, active: bool):
             if vlan is not None:
                 _set_radreply_vlan(username, vlan)
     else:
-        conn.modify(dn, {'pwdAccountLockedTime': [(MODIFY_REPLACE, ['000001010000Z'])]})
-        conn.unbind()
         # Zablokuj RADIUS prístup — vymaž radreply
         from django.db import connection as db
         with db.cursor() as cur:
@@ -317,9 +327,9 @@ def get_next_group_id(group: str) -> int:
     return max_id + 1
 
 
-def generate_temp_username(prefix: str = 'guest') -> str:
+def generate_temp_username(prefix: str = 'g') -> str:
     """Vygeneruje unikátne meno pre dočasného používateľa."""
-    suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+    suffix = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(5))
     return f'{prefix}_{suffix}'
 
 

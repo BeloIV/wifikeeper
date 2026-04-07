@@ -22,7 +22,7 @@ class TestTempKeyList:
 @pytest.mark.django_db
 class TestTempKeyCreate:
     @patch('apps.keys.views.ldap.create_user')
-    @patch('apps.keys.views.ldap.generate_temp_username', return_value='guest_xy1234')
+    @patch('apps.keys.views.ldap.generate_temp_username', return_value='g_xy123')
     def test_create_with_valid_hours(self, mock_gen, mock_create, api_client):
         mock_create.return_value = {}
         res = api_client.post('/api/keys/', {
@@ -40,7 +40,7 @@ class TestTempKeyCreate:
         assert timedelta(hours=23) < diff < timedelta(hours=25)
 
     @patch('apps.keys.views.ldap.create_user')
-    @patch('apps.keys.views.ldap.generate_temp_username', return_value='guest_ab5678')
+    @patch('apps.keys.views.ldap.generate_temp_username', return_value='g_ab567')
     def test_create_with_expires_at(self, mock_gen, mock_create, api_client):
         mock_create.return_value = {}
         future = timezone.now() + timedelta(days=3)
@@ -56,7 +56,7 @@ class TestTempKeyCreate:
         assert abs((returned - future).total_seconds()) < 5
 
     @patch('apps.keys.views.ldap.create_user')
-    @patch('apps.keys.views.ldap.generate_temp_username', return_value='guest_cd9999')
+    @patch('apps.keys.views.ldap.generate_temp_username', return_value='g_cd999')
     def test_create_one_time(self, mock_gen, mock_create, api_client):
         mock_create.return_value = {}
         res = api_client.post('/api/keys/', {

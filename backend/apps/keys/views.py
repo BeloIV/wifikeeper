@@ -51,7 +51,7 @@ class TempKeyListView(APIView):
         d = serializer.validated_data
 
         # Vygeneruj LDAP prihlasovacie údaje
-        username = ldap.generate_temp_username('guest')
+        username = ldap.generate_temp_username('g')
         password = _generate_password()
 
         # Vytvor LDAP účet
