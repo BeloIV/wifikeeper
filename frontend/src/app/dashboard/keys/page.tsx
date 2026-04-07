@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, type TempKey, type GroupInfo } from '@/lib/api'
 import { formatDate, formatRelative } from '@/lib/utils'
 import { VlanInfoButton } from '@/components/VlanInfoButton'
@@ -25,7 +25,7 @@ export default function KeysPage() {
     max_uses: 1,
     email: '',
   })
-  const [maxUsesRaw, setMaxUsesRaw] = useState(String(form.max_uses))
+  const maxUsesRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [activeOnly, setActiveOnly] = useState(false)
@@ -78,7 +78,7 @@ export default function KeysPage() {
         }
       }
       if (form.key_type === 'multi_use') {
-        const uses = parseInt(maxUsesRaw)
+        const uses = parseInt(maxUsesRef.current?.value ?? '')
         if (isNaN(uses) || uses < 1) { setError('Zadaj platný počet prihlásení (min. 1).'); setSaving(false); return }
         body.max_uses = uses
       }
@@ -405,7 +405,10 @@ export default function KeysPage() {
                   {[1, 2, 5, 10, 20, 50].map((n) => (
                     <button
                       key={n}
-                      onClick={() => { setForm({ ...form, max_uses: n }); setMaxUsesRaw(String(n)) }}
+                      onClick={() => {
+                        if (maxUsesRef.current) maxUsesRef.current.value = String(n)
+                        setForm({ ...form, max_uses: n })
+                      }}
                       className={`flex-1 py-1.5 text-xs rounded-lg border ${
                         form.max_uses === n ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600'
                       }`}
@@ -414,16 +417,11 @@ export default function KeysPage() {
                     </button>
                   ))}
                   <input
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={maxUsesRaw}
-                    onChange={(e) => {
-                      setMaxUsesRaw(e.target.value)
-                      const n = parseInt(e.target.value)
-                      if (!isNaN(n) && n >= 1) setForm({ ...form, max_uses: n })
-                    }}
-
+                    ref={maxUsesRef}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    defaultValue="1"
                     className="w-16 border border-gray-200 rounded-lg px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                 </div>
