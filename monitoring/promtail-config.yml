@@ -1,0 +1,65 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=wifikeeper"]
+
+    relabel_configs:
+      # Vyber názov service z compose labelu
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+
+      # Pridaj meno kontajnera pre debugovanie
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+
+    pipeline_stages:
+      # ── UniFi: vyhoď WebRTC/STUN/TURN noise ──────────────────────────────
+      - match:
+          selector: '{service="unifi"}'
+          stages:
+            - drop:
+                expression: ".*(TCP candidates not supported|TURN instance failed|STUN id.*timed out|webRtcId.*terminated|allocate request|WebRTC connection interrupted|ls\\.io-init).*"
+
+      # ── Celery: vyhoď "succeeded" spam, nechaj len zlyhania ──────────────
+      - match:
+          selector: '{service="celery"}'
+          stages:
+            - drop:
+                expression: ".*Task .* succeeded in [0-9].*"
+
+      # ── Celery-beat: vyhoď routine heartbeat logy ─────────────────────────
+      - match:
+          selector: '{service="celery-beat"}'
+          stages:
+            - drop:
+                expression: ".*(Scheduler: Sending due task|beat: Starting|DatabaseScheduler: Schedule changed).*"
+
+      # ── Nginx: vyhoď healthcheck pings (200 na /) ────────────────────────
+      - match:
+          selector: '{service="nginx"}'
+          stages:
+            - drop:
+                expression: '"GET / HTTP/[0-9.]+" 200'
+
+      # ── Postgres: vyhoď routine checkpoint logy ───────────────────────────
+      - match:
+          selector: '{service="postgres"}'
+          stages:
+            - drop:
+                expression: ".*(checkpoint complete|checkpoint starting|autovacuum: found|automatic vacuum).*"

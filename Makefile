@@ -41,6 +41,16 @@ prod-cert:
 prod-migrate:
 	docker compose -f docker-compose.prod.yml exec backend python manage.py migrate
 
+# ── Monitoring (Loki + Grafana) ───────────────────────────────────────────────
+monitoring-up:
+	docker compose -f docker-compose.monitoring.yml up -d
+
+monitoring-down:
+	docker compose -f docker-compose.monitoring.yml down
+
+monitoring-logs:
+	docker compose -f docker-compose.monitoring.yml logs -f
+
 # ── Upratovanie ───────────────────────────────────────────────────────────────
 clean:
 	docker compose down -v
