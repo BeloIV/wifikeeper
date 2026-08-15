@@ -1,0 +1,80 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: wifikeeper-alerts
+    folder: WifiKeeper
+    interval: 5m
+    rules:
+
+      - uid: celery-error
+        title: "Celery: ERROR v logoch"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Celery worker zaznamenal ERROR"
+          description: "Skontroluj logy: docker compose logs celery --tail=50"
+        labels:
+          severity: critical
+          service: celery
+        data:
+          - refId: A
+            datasourceUid: loki
+            queryType: range
+            model:
+              expr: 'sum(count_over_time({service="celery"} |= "ERROR" [5m]))'
+              queryType: range
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+
+      - uid: celery-email-fail
+        title: "Celery: zlyhanie odosielania emailu"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Email sa nepodarilo odoslať"
+          description: "Celery task send_*_email zlyhal. Skontroluj SMTP credentials a FD limit."
+        labels:
+          severity: critical
+          service: celery
+        data:
+          - refId: A
+            datasourceUid: loki
+            queryType: range
+            model:
+              expr: 'sum(count_over_time({service="celery"} |= "Chyba pri odosielaní" [5m]))'
+              queryType: range
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+
+      - uid: celery-fd-limit
+        title: "Celery: Too many open files"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Celery dosiahol limit file descriptorov"
+          description: "Reštartuj celery container: docker compose restart celery"
+        labels:
+          severity: critical
+          service: celery
+        data:
+          - refId: A
+            datasourceUid: loki
+            queryType: range
+            model:
+              expr: 'sum(count_over_time({service="celery"} |= "Too many open files" [5m]))'
+              queryType: range
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0

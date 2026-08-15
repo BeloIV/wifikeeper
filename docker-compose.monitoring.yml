@@ -38,6 +38,13 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: ${EMAIL_HOST:-smtp-relay.brevo.com}:${EMAIL_PORT:-587}
+      GF_SMTP_USER: ${BREVO_SMTP_USER}
+      GF_SMTP_PASSWORD: ${BREVO_SMTP_KEY}
+      GF_SMTP_FROM_ADDRESS: ${MAIL_FROM:-no-reply@oratko.sk}
+      GF_SMTP_FROM_NAME: "WiFi Monitor"
+      GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
     depends_on:
       loki:
         condition: service_healthy
