@@ -177,6 +177,10 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       AP_SSH_USER: ${AP_SSH_USER}
       AP_SSH_PASSWORD: ${AP_SSH_PASSWORD}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     command: celery -A config worker -l info
 
   celery-beat:

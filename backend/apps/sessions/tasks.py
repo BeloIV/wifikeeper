@@ -23,8 +23,8 @@ def _get_connected_macs_via_ssh(nas_ip: str) -> set | None:
         logger.warning('AP_SSH_USER/AP_SSH_PASSWORD nie sú nastavené, preskakujem overenie')
         return None
 
+    ssh = paramiko.SSHClient()
     try:
-        ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(nas_ip, username=ssh_user, password=ssh_pass, timeout=5)
 
@@ -49,13 +49,14 @@ def _get_connected_macs_via_ssh(nas_ip: str) -> set | None:
                 if len(line) == 17 and line.count(':') == 5:
                     macs.add(line.lower())
 
-        ssh.close()
         logger.debug(f'verify_sessions: {nas_ip} má {len(macs)} pripojených klientov')
         return macs
 
     except Exception as e:
         logger.warning(f'SSH get_connected_macs zlyhal pre {nas_ip}: {e}')
         return None
+    finally:
+        ssh.close()
 
 
 @shared_task
