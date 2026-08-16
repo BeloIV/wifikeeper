@@ -9,3 +9,21 @@ contactPoints:
         settings:
           addresses: support@salezianipresov.xyz
           singleEmail: true
+      - uid: push-webhook-receiver
+        type: webhook
+        settings:
+          url: http://backend:8000/api/push/webhook/grafana/
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $PUSH_WEBHOOK_SECRET
+
+  - orgId: 1
+    name: push-only
+    receivers:
+      - uid: push-webhook-receiver-only
+        type: webhook
+        settings:
+          url: http://backend:8000/api/push/webhook/grafana/
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: $PUSH_WEBHOOK_SECRET

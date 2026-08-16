@@ -13,18 +13,30 @@ const NAV = [
   { href: '/dashboard/live', label: 'Live', short: 'Live', icon: '📶' },
   { href: '/dashboard/history', label: 'História', short: 'Hist.', icon: '📋' },
   { href: '/dashboard/admins', label: 'Admini', short: 'Admin', icon: '⚙️', superadminOnly: true },
+  { href: '/dashboard/notifications', label: 'Notifikácie', short: 'Notif.', icon: '🔔', superadminOnly: true },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     api.get<User>('/admins/me/').then(setUser).catch(() => {
       router.push('/login')
     })
   }, [router])
+
+  useEffect(() => {
+    if (!user || user.role !== 'superadmin') return
+    const load = () => {
+      api.get<{ count: number }>('/push/notifications/unread-count/').then((d) => setUnreadCount(d.count)).catch(() => {})
+    }
+    load()
+    const interval = setInterval(load, 60_000)
+    return () => clearInterval(interval)
+  }, [user, pathname])
 
   if (!user) {
     return (
@@ -69,7 +81,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <span>{item.icon}</span>
+                <span className="relative">
+                  {item.icon}
+                  {item.href === '/dashboard/notifications' && unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500" />
+                  )}
+                </span>
                 {item.label}
               </Link>
             )
@@ -98,7 +115,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               }`}
               style={{ minHeight: 52 }}
             >
-              <span className="text-xl leading-none">{item.icon}</span>
+              <span className="relative text-xl leading-none">
+                {item.icon}
+                {item.href === '/dashboard/notifications' && unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-red-500" />
+                )}
+              </span>
               <span style={{ fontSize: 9 }} className="leading-tight font-medium">{item.short}</span>
             </Link>
           )

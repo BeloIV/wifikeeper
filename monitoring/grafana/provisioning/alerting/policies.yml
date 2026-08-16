@@ -7,3 +7,10 @@ policies:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
+    routes:
+      # Nginx 4xx/5xx – len push, bez emailu (obe majú label service=nginx,
+      # žiadny iný alert toto service nepoužíva)
+      - receiver: push-only
+        object_matchers:
+          - [service, "=", nginx]
+        continue: false

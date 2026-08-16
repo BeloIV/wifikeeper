@@ -6,6 +6,8 @@ from celery import shared_task
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 
+from apps.email_utils import LOGO_HTML_TAG, attach_logo
+
 logger = logging.getLogger(__name__)
 
 DEVICE_LIMIT = 2
@@ -54,6 +56,7 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
           <!-- Header -->
           <tr>
             <td style="background:#1d4ed8;padding:28px 32px;text-align:center;">
+              {LOGO_HTML_TAG}
               <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:0.8;">Saleziánske oratórium Prešov</p>
               <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">Prístup na WiFi</h1>
             </td>
@@ -165,6 +168,7 @@ def send_user_credentials_email(email: str, username: str, password: str, group_
             to=[email],
         )
         msg.attach_alternative(html_body, 'text/html')
+        attach_logo(msg)
         msg.send()
     except Exception as exc:
         logger.error(f'Chyba pri odosielaní emailu na {email}: {exc}')
@@ -203,6 +207,7 @@ def send_admin_invitation_email(email: str, role: str, invitation_url: str, expi
           <!-- Header -->
           <tr>
             <td style="background:#1d4ed8;padding:28px 32px;text-align:center;">
+              {LOGO_HTML_TAG}
               <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:0.8;">Saleziánske oratórium Prešov</p>
               <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">Pozvánka do WiFi správcu</h1>
             </td>
@@ -276,6 +281,7 @@ def send_admin_invitation_email(email: str, role: str, invitation_url: str, expi
             to=[email],
         )
         msg.attach_alternative(html_body, 'text/html')
+        attach_logo(msg)
         msg.send()
     except Exception as exc:
         logger.error(f'Chyba pri odosielaní pozvánky na {email}: {exc}')
@@ -314,6 +320,7 @@ def send_device_limit_email(email: str, username: str):
           <!-- Header -->
           <tr>
             <td style="background:#dc2626;padding:28px 32px;text-align:center;">
+              {LOGO_HTML_TAG}
               <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:0.8;">Saleziánske oratórium Prešov</p>
               <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">Limit zariadení prekročený</h1>
             </td>
@@ -370,4 +377,5 @@ def send_device_limit_email(email: str, username: str):
         to=[email],
     )
     msg.attach_alternative(html_body, 'text/html')
+    attach_logo(msg)
     msg.send()

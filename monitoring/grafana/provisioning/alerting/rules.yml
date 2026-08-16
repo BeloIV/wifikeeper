@@ -78,3 +78,153 @@ groups:
             relativeTimeRange:
               from: 300
               to: 0
+
+  - orgId: 1
+    name: wifikeeper-infra-alerts
+    folder: WifiKeeper
+    interval: 1m
+    rules:
+
+      - uid: container-down
+        title: "Kontajner nebeží"
+        condition: A
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Kontajner {{ $labels.name }} nie je spustený"
+          description: "Stav: {{ $labels.state }}. Skontroluj: docker compose ps {{ $labels.name }}; docker compose logs {{ $labels.name }} --tail=50"
+        labels:
+          severity: critical
+          service: "{{ $labels.name }}"
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: 'wifikeeper_container_up == 0'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+
+      - uid: nginx-5xx
+        title: "Nginx: 5xx chyby"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Nginx vrátil 5xx chyby (status {{ $labels.status }}, host {{ $labels.host }})"
+          description: "Skontroluj logy: docker compose logs nginx --tail=100 | grep 'status=5'"
+        labels:
+          severity: critical
+          service: nginx
+        data:
+          - refId: A
+            datasourceUid: loki
+            queryType: instant
+            model:
+              expr: 'sum by (status, host) (count_over_time({service="nginx"} | regexp `status=(?P<status>\d+) bytes=(?P<bytes>\d+) host=(?P<host>\S+)` | status >= 500 [5m])) > 0'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+
+      - uid: nginx-4xx-burst
+        title: "Nginx: 4xx chyby"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Nginx vrátil 4xx chybu (status {{ $labels.status }}, host {{ $labels.host }})"
+          description: "Skontroluj logy: docker compose logs nginx --tail=100 | grep 'status=4'"
+        labels:
+          severity: warning
+          service: nginx
+        data:
+          - refId: A
+            datasourceUid: loki
+            queryType: instant
+            model:
+              expr: 'sum by (status, host) (count_over_time({service="nginx"} | regexp `status=(?P<status>\d+) bytes=(?P<bytes>\d+) host=(?P<host>\S+)` | status >= 400 | status < 500 [5m])) > 0'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+
+      - uid: cpu-high
+        title: "Server: vysoké CPU využitie"
+        condition: A
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "CPU využitie servera je vysoké"
+          description: "Skontroluj Grafana dashboard 'WifiKeeper Infraštruktúra' a `docker stats`, ktorý kontajner zaťažuje CPU."
+        labels:
+          severity: warning
+          service: server
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: '(100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)) > 85'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+
+      - uid: memory-high
+        title: "Server: vysoké využitie RAM"
+        condition: A
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Využitie RAM servera je vysoké"
+          description: "Skontroluj Grafana dashboard 'WifiKeeper Infraštruktúra' a `docker stats`, ktorý kontajner zaberá najviac pamäte."
+        labels:
+          severity: warning
+          service: server
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: '((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100) > 85'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+
+      - uid: disk-high
+        title: "Server: vysoké využitie disku"
+        condition: A
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Využitie disku (/) servera je vysoké"
+          description: "Skontroluj voľné miesto: df -h. Zváž vyčistenie starých logov/backupov."
+        labels:
+          severity: warning
+          service: server
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: '(100 - (node_filesystem_avail_bytes{mountpoint="/"} * 100 / node_filesystem_size_bytes{mountpoint="/"})) > 85'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0

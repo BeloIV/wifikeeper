@@ -9,6 +9,8 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 
+from apps.email_utils import LOGO_HTML_TAG, attach_logo
+
 logger = logging.getLogger(__name__)
 
 
@@ -208,6 +210,7 @@ def send_key_email(key_id: str, recipient_email: str):
           <!-- Header -->
           <tr>
             <td style="background:#1d4ed8;padding:28px 32px;text-align:center;">
+              {LOGO_HTML_TAG}
               <p style="margin:0;color:#ffffff;font-size:13px;letter-spacing:1px;text-transform:uppercase;opacity:0.8;">Saleziánske oratórium Prešov</p>
               <h1 style="margin:8px 0 0;color:#ffffff;font-size:22px;font-weight:700;">Prístup na WiFi</h1>
             </td>
@@ -312,6 +315,7 @@ def send_key_email(key_id: str, recipient_email: str):
             to=[recipient_email],
         )
         msg.attach_alternative(html_body, 'text/html')
+        attach_logo(msg)
         msg.send()
 
         key.email_sent_to = recipient_email

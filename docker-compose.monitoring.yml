@@ -25,6 +25,45 @@ services:
       loki:
         condition: service_healthy
 
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - container-stats-textfile:/textfile:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      - "--collector.textfile.directory=/textfile"
+
+  container-stats:
+    image: docker:27-cli
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - container-stats-textfile:/textfile
+      - ./monitoring/container-stats/export.sh:/export.sh:ro
+    entrypoint: ["/bin/sh", "/export.sh"]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+    depends_on:
+      - node-exporter
+
   grafana:
     image: grafana/grafana:11.1.0
     restart: unless-stopped
@@ -45,6 +84,10 @@ services:
       GF_SMTP_FROM_ADDRESS: ${MAIL_FROM:-no-reply@oratko.sk}
       GF_SMTP_FROM_NAME: "WiFi Monitor"
       GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
+      GRAFANA_PG_PASSWORD: ${GRAFANA_PG_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-wifimanager}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/wifikeeper-overview.json
+      PUSH_WEBHOOK_SECRET: ${PUSH_WEBHOOK_SECRET}
     depends_on:
       loki:
         condition: service_healthy
@@ -52,6 +95,8 @@ services:
 volumes:
   loki-data:
   grafana-data:
+  prometheus-data:
+  container-stats-textfile:
 
 networks:
   default:

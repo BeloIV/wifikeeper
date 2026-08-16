@@ -14,4 +14,5 @@ urlpatterns = [
     re_path(r'^api/sessions/?', include('apps.sessions.urls')),
     re_path(r'^api/audit/?', include('apps.audit.urls')),
     re_path(r'^api/admins/?', include('apps.panel_users.urls')),
+    re_path(r'^api/push/?', include('apps.push.urls')),
 ]

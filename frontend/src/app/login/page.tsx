@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { login } from '@/lib/api'
 
 export default function LoginPage() {
@@ -29,12 +30,14 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-            </svg>
-          </div>
+          <Image
+            src="/icon-192.png"
+            alt="WiFi Manager"
+            width={72}
+            height={72}
+            className="rounded-2xl mx-auto mb-4"
+            priority
+          />
           <h1 className="text-2xl font-bold text-gray-900">WiFi Manager</h1>
           <p className="text-sm text-gray-500 mt-1">Saleziánske oratórium</p>
         </div>

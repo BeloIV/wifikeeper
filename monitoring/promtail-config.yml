@@ -55,7 +55,7 @@ scrape_configs:
           selector: '{service="nginx"}'
           stages:
             - drop:
-                expression: '"GET / HTTP/[0-9.]+" 200'
+                expression: '"GET / HTTP/[0-9.]+" status=200'
 
       # ── Postgres: vyhoď routine checkpoint logy ───────────────────────────
       - match:

@@ -1,0 +1,219 @@
+{
+  "id": null,
+  "uid": "wifikeeper-users",
+  "title": "WifiKeeper Používatelia",
+  "tags": ["wifikeeper"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Aktuálne pripojení",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM radius_sessions WHERE acct_stop_time IS NULL;",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Nové pripojenia (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM radius_sessions WHERE acct_start_time >= now() - interval '24 hours';",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Unikátni používatelia (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT username) AS value FROM radius_sessions WHERE acct_start_time >= now() - interval '24 hours';",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Priemerná dĺžka session",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "table",
+          "rawSql": "SELECT coalesce(avg(acct_session_time), 0) AS value FROM radius_sessions WHERE acct_start_time >= now() - interval '24 hours' AND acct_session_time IS NOT NULL;",
+          "rawQuery": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Počet súčasne pripojených v čase",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH baseline AS (\n  SELECT $__timeFrom() AS t, count(*) AS delta\n  FROM radius_sessions\n  WHERE acct_start_time < $__timeFrom()\n    AND (acct_stop_time IS NULL OR acct_stop_time >= $__timeFrom())\n),\nevents AS (\n  SELECT acct_start_time AS t, 1 AS delta\n  FROM radius_sessions\n  WHERE acct_start_time BETWEEN $__timeFrom() AND $__timeTo()\n  UNION ALL\n  SELECT acct_stop_time AS t, -1 AS delta\n  FROM radius_sessions\n  WHERE acct_stop_time BETWEEN $__timeFrom() AND $__timeTo()\n),\ncombined AS (\n  SELECT t, delta FROM baseline\n  UNION ALL\n  SELECT t, delta FROM events\n)\nSELECT t AS \"time\", sum(delta) OVER (ORDER BY t) AS \"pripojení používatelia\"\nFROM combined\nORDER BY t;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter", "fillOpacity": 15 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Nové pripojenia podľa hodiny",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('hour', acct_start_time) AS \"time\", count(*) AS \"nové pripojenia\"\nFROM radius_sessions\nWHERE acct_start_time BETWEEN $__timeFrom() AND $__timeTo()\nGROUP BY 1\nORDER BY 1;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 40 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Práve pripojení používatelia",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "postgres", "uid": "wifikeeper-postgres" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT username, calling_station_id AS zariadenie, called_station_id AS ap, acct_start_time AS pripojený_od, framed_ip_address AS ip\nFROM radius_sessions\nWHERE acct_stop_time IS NULL\nORDER BY acct_start_time DESC;"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}

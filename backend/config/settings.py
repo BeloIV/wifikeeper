@@ -14,6 +14,14 @@ FIELD_ENCRYPTION_KEY = os.environ['FIELD_ENCRYPTION_KEY']
 RADIUS_COA_SECRET = os.environ['RADIUS_COA_SECRET']
 AP_SSH_USER = os.environ.get('AP_SSH_USER', '')
 AP_SSH_PASSWORD = os.environ.get('AP_SSH_PASSWORD', '')
+# Web Push (PWA notifikácie pre superadmina) — vyžadované, nie tichý fallback:
+# prázdny VAPID_PRIVATE_KEY by spôsobil, že webpush() tíško zlyhá na každom
+# odberateľovi, a prázdny PUSH_WEBHOOK_SECRET by odmietol každý reálny Grafana
+# webhook (secret sa nikdy nezhoduje s '') bez toho, aby si si toho niekto všimol.
+VAPID_PUBLIC_KEY = os.environ['VAPID_PUBLIC_KEY']
+VAPID_PRIVATE_KEY = os.environ['VAPID_PRIVATE_KEY']
+VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'mailto:admin@example.com')
+PUSH_WEBHOOK_SECRET = os.environ['PUSH_WEBHOOK_SECRET']
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 APPEND_SLASH = False
@@ -36,6 +44,7 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.sessions',
     'apps.audit',
+    'apps.push',
 ]
 
 MIDDLEWARE = [
