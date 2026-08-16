@@ -1,0 +1,30 @@
+# =============================================================================
+# Status-Server virtual server – interné štatistiky FreeRADIUS.
+#
+# Slúži na monitoring REÁLNEJ prevádzky: počet Access-Request, duplicít
+# (= AP nedostal odpoveď a poslal request znova) a zahodených paketov.
+# Tieto čísla sú dostupné IBA cez socket typu "status".
+#
+# Bezpečnosť: počúva len na 127.0.0.1 vnútri kontajnera, teda nie je
+# dosiahnuteľný ani z Docker siete, ani zvonku. Dotazuje sa naň exporter
+# cez `docker exec`.
+# =============================================================================
+server status {
+	listen {
+		type = status
+		ipaddr = 127.0.0.1
+		port = 18121
+	}
+
+	client statusmon {
+		ipaddr = 127.0.0.1
+		secret = ${RADIUS_STATUS_SECRET}
+	}
+
+	authorize {
+		ok
+		Autz-Type Status-Server {
+			ok
+		}
+	}
+}

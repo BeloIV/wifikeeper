@@ -17,4 +17,10 @@ RUN chmod +x /docker-entrypoint.sh
 EXPOSE 1812/udp 1813/udp 3799/udp
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["freeradius", "-X"]
+# -X (plný debug) sa nemá používať v produkcii — FreeRADIUS to explicitne
+# odporúča nerobiť. Spôsoboval obrovský objem logov (~370k riadkov/deň),
+# ktorý pri zápise na stdout vedel zablokovať samotné spracovanie RADIUS
+# requestov (namerané oneskorenia v EAP-PEAP konverzáciách až do 30s).
+# -f = foreground (nutné pre Docker), -l stdout = normálne logy naďalej
+# na stdout (viditeľné v `docker compose logs` aj Loki/Grafana).
+CMD ["freeradius", "-f", "-l", "stdout"]

@@ -50,6 +50,18 @@ services:
       - ./monitoring/container-stats/export.sh:/export.sh:ro
     entrypoint: ["/bin/sh", "/export.sh"]
 
+  # Reálne interné štatistiky FreeRADIUS (latencia, retransmisie od AP).
+  # Dotazuje sa cez `docker exec` na status socket, ktorý počúva len na
+  # 127.0.0.1 vnútri freeradius kontajnera — nič nie je exponované navonok.
+  radius-stats:
+    image: docker:27-cli
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - container-stats-textfile:/textfile
+      - ./monitoring/container-stats/radius-stats.sh:/radius-stats.sh:ro
+    entrypoint: ["/bin/sh", "/radius-stats.sh"]
+
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped

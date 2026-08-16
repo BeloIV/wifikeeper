@@ -5,6 +5,7 @@ certbot/cloudflare.ini
 certs/
 *.pem
 radius/config/clients.conf
+radius/config/sites-available/status
 snappymail/data/
 data/
 

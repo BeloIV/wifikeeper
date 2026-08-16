@@ -1,5 +1,14 @@
 apiVersion: 1
 
+# Zmazanie starého alertu, ktorý bol postavený na linelog AUTH_LATENCY prístupe.
+# Ten sme vrátili späť (zasahoval do živej auth politiky), takže pravidlo by
+# navždy viselo v stave NoData. Provisioned pravidlá sa nedajú zmazať cez API,
+# len takto.
+deleteRules:
+  - orgId: 1
+    uid: radius-latency-high
+
+
 groups:
   - orgId: 1
     name: wifikeeper-alerts
@@ -227,4 +236,76 @@ groups:
               refId: A
             relativeTimeRange:
               from: 60
+              to: 0
+
+      - uid: radius-slow-response
+        title: "RADIUS: pomalá odpoveď reálnym používateľom (>1s)"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "FreeRADIUS spracoval request pomalšie ako 1 sekundu"
+          description: "Zdroj: interné štatistiky FreeRADIUS (Stats-Elapsed), teda reálna prevádzka. Bežná hodnota je pod 10 ms. Skontroluj docker stats a docker compose logs freeradius --tail=50."
+        labels:
+          severity: warning
+          service: freeradius
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: 'sum(increase(wifikeeper_radius_latency_bucket_total{bucket=~"1s|10s"}[5m])) > 0'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+
+      - uid: radius-retransmissions
+        title: "RADIUS: AP nedostáva odpovede (retransmisie)"
+        condition: A
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "UniFi AP musel poslať RADIUS request znova — server neodpovedal včas"
+          description: "Presne ten príznak, ktorý hlási UniFi ako 'server neodpovedá'. Skontroluj zaťaženie servera a docker compose logs freeradius."
+        labels:
+          severity: critical
+          service: freeradius
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: 'sum(increase(wifikeeper_radius_auth_duplicate_requests_total[5m])) > 0'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+
+      - uid: radius-stats-down
+        title: "RADIUS: monitoring štatistík nefunguje"
+        condition: A
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        annotations:
+          summary: "Nedá sa čítať zo Status-Server socketu FreeRADIUS"
+          description: "Monitoring RADIUS latencie je slepý. Skontroluj: docker compose -f docker-compose.monitoring.yml logs radius-stats"
+        labels:
+          severity: warning
+          service: freeradius
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              expr: '(wifikeeper_radius_stats_up < 1) or absent_over_time(wifikeeper_radius_stats_up[10m])'
+              queryType: instant
+              refId: A
+            relativeTimeRange:
+              from: 600
               to: 0

@@ -17,7 +17,7 @@ cp "$CONF_SRC/clients.conf" "$CONF_DIR/clients.conf"
 echo "Copied clients.conf"
 
 # sites
-for site in default inner-tunnel; do
+for site in default inner-tunnel status; do
     if [ -f "$CONF_SRC/sites-available/$site" ]; then
         cp "$CONF_SRC/sites-available/$site" "$CONF_DIR/sites-available/$site"
         ln -sf "$CONF_DIR/sites-available/$site" "$CONF_DIR/sites-enabled/$site"
