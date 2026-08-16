@@ -51,7 +51,7 @@ export default function DashboardPage() {
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm text-gray-900 truncate">{s.username}</div>
                   <div className="text-xs text-gray-400 truncate">
-                    {s.framed_ip_address} · {s.ssid} · {s.nas_identifier || s.ap_mac}
+                    {s.device_name || s.framed_ip_address} · {s.ssid} · {s.ap_name || s.nas_identifier || s.ap_mac}
                   </div>
                 </div>
                 <div className="text-xs text-gray-400 flex-shrink-0 hidden sm:block">

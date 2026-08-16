@@ -104,8 +104,14 @@ export default function LivePage() {
                     {/* Row 2: IP · AP · MAC */}
                     <div className="mt-1 text-xs text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">
                       <span className="truncate max-w-[120px]">IP: {s.framed_ip_address || '–'}</span>
-                      <span className="truncate max-w-[140px]">AP: {s.nas_identifier || s.ap_mac || '–'}</span>
-                      <span className="truncate max-w-[130px]">MAC: {s.calling_station_id || '–'}</span>
+                      <span className="truncate max-w-[140px]" title={s.nas_ip_address}>
+                        AP: {s.ap_name || s.nas_identifier || s.ap_mac || '–'}
+                      </span>
+                      <span className="truncate max-w-[170px]" title={s.calling_station_id}>
+                        {s.device_name
+                          ? `Zariadenie: ${s.device_name}`
+                          : `MAC: ${s.calling_station_id || '–'}`}
+                      </span>
                     </div>
                     {/* Row 3: time info + data */}
                     <div className="mt-0.5 text-xs text-gray-400 flex flex-wrap gap-x-3 gap-y-0.5">

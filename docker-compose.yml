@@ -169,6 +169,9 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_CLAIM_EMAIL: ${VAPID_CLAIM_EMAIL}
       PUSH_WEBHOOK_SECRET: ${PUSH_WEBHOOK_SECRET}
+      UNIFI_MONGO_HOST: unifi-db
+      UNIFI_MONGO_USER: ${UNIFI_MONGO_USER}
+      UNIFI_MONGO_PASS: ${UNIFI_MONGO_PASS}
     command: >
       sh -c "python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"

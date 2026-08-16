@@ -143,6 +143,10 @@ export type RadiusSession = {
   ap_mac: string
   download_mb: number
   upload_mb: number
+  /** Názov zariadenia z UniFi (napr. "iPhone"). Prázdny, ak ho nepoznáme. */
+  device_name: string
+  /** Názov prístupového bodu z UniFi (napr. "Kostol"). Prázdny, ak ho nepoznáme. */
+  ap_name: string
 }
 
 export type AuditLog = {

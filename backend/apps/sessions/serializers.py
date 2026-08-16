@@ -8,6 +8,17 @@ class RadiusSessionSerializer(serializers.ModelSerializer):
     ap_mac = serializers.CharField(read_only=True)
     download_mb = serializers.FloatField(read_only=True)
     upload_mb = serializers.FloatField(read_only=True)
+    # Ľudsky čitateľné názvy namiesto MAC/IP. Napĺňa ich view cez context
+    # (hromadne, aby nevznikali N+1 dotazy). Ak názov nepoznáme, ostane prázdny
+    # a frontend zobrazí pôvodnú MAC/IP.
+    device_name = serializers.SerializerMethodField()
+    ap_name = serializers.SerializerMethodField()
+
+    def get_device_name(self, obj) -> str:
+        return self.context.get('device_names', {}).get(obj.calling_station_id, '')
+
+    def get_ap_name(self, obj) -> str:
+        return self.context.get('ap_names', {}).get(str(obj.nas_ip_address), '')
 
     class Meta:
         model = RadiusSession
@@ -19,4 +30,5 @@ class RadiusSessionSerializer(serializers.ModelSerializer):
             'acct_terminate_cause', 'connect_info_start',
             'acct_input_octets', 'acct_output_octets',
             'is_active', 'ssid', 'ap_mac', 'download_mb', 'upload_mb',
+            'device_name', 'ap_name',
         ]

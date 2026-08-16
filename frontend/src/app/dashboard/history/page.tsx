@@ -136,7 +136,8 @@ export default function HistoryPage() {
                         <span>Koniec: {s.acct_stop_time ? formatDate(s.acct_stop_time) : '–'}</span>
                         <span>Trvanie: {formatDuration(s.acct_session_time)}</span>
                         <span>IP: {s.framed_ip_address || '–'}</span>
-                        <span>AP: {s.nas_identifier || s.ap_mac || '–'}</span>
+                        <span>AP: {s.ap_name || s.nas_identifier || s.ap_mac || '–'}</span>
+                        {s.device_name && <span>Zariadenie: {s.device_name}</span>}
                         <span>{s.download_mb}↓ / {s.upload_mb}↑ MB</span>
                       </div>
                       {s.acct_terminate_cause && (

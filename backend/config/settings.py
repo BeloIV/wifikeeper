@@ -22,6 +22,11 @@ VAPID_PUBLIC_KEY = os.environ['VAPID_PUBLIC_KEY']
 VAPID_PRIVATE_KEY = os.environ['VAPID_PRIVATE_KEY']
 VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'mailto:admin@example.com')
 PUSH_WEBHOOK_SECRET = os.environ['PUSH_WEBHOOK_SECRET']
+# UniFi controller MongoDB – zdroj názvov zariadení (hostname) pre user_devices.label.
+# Voliteľné: ak nie je nastavené, názvy sa jednoducho nedoplnia (appka funguje ďalej).
+UNIFI_MONGO_HOST = os.environ.get('UNIFI_MONGO_HOST', 'unifi-db')
+UNIFI_MONGO_USER = os.environ.get('UNIFI_MONGO_USER', '')
+UNIFI_MONGO_PASS = os.environ.get('UNIFI_MONGO_PASS', '')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',')
 APPEND_SLASH = False

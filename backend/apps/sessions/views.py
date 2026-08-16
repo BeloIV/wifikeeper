@@ -12,6 +12,8 @@ from .utils import ssh_deauth_mac
 from .models import RadiusSession, UserDevice, UserDeviceLimit
 from .serializers import RadiusSessionSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class LiveSessionsView(APIView):
     """Aktívne pripojenia (bez acct_stop_time)."""
@@ -26,7 +28,10 @@ class LiveSessionsView(APIView):
         if ssid_filter:
             sessions = sessions.filter(called_station_id__icontains=ssid_filter)
 
-        return Response(RadiusSessionSerializer(sessions, many=True).data)
+        sessions = list(sessions)
+        return Response(RadiusSessionSerializer(
+            sessions, many=True, context=_session_display_names(sessions)
+        ).data)
 
 
 class DisconnectUserView(APIView):
@@ -111,14 +116,124 @@ class SessionHistoryView(APIView):
         paginator.page_size = 50
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(
-            RadiusSessionSerializer(page, many=True).data
+            RadiusSessionSerializer(
+                page, many=True, context=_session_display_names(page)
+            ).data
         )
+
+
+def _unifi_hostnames(mac_addresses: list[str]) -> dict[str, str]:
+    """
+    Vytiahne názvy zariadení (hostname, napr. "iPhone", "Redmi-12-5G") z databázy
+    UniFi controllera pre zadané MAC adresy. Vracia {MAC v našom formáte: názov}.
+
+    UniFi je jediný spoľahlivý zdroj – telefóny dnes používajú randomizované MAC
+    adresy, takže z MAC sa nedá určiť ani výrobca, a reverzný DNS na WiFi klientov
+    nefunguje (nemajú PTR záznam).
+
+    Jeden dotaz pre všetky MAC naraz. Pri akomkoľvek probléme vráti prázdny dict –
+    názvy sú len doplnková informácia, výpadok UniFi nesmie rozbiť zoznam zariadení.
+    """
+    from django.conf import settings
+
+    if not mac_addresses or not settings.UNIFI_MONGO_USER:
+        return {}
+
+    # UniFi ukladá MAC malými písmenami s dvojbodkami, my máme veľké s pomlčkami.
+    to_unifi = {m.replace('-', ':').lower(): m for m in mac_addresses}
+
+    client = None
+    try:
+        from pymongo import MongoClient
+
+        client = MongoClient(
+            host=settings.UNIFI_MONGO_HOST,
+            username=settings.UNIFI_MONGO_USER,
+            password=settings.UNIFI_MONGO_PASS,
+            authSource='admin',
+            serverSelectionTimeoutMS=2000,
+            connectTimeoutMS=2000,
+            socketTimeoutMS=2000,
+        )
+        docs = client['unifi']['user'].find(
+            {'mac': {'$in': list(to_unifi)}},
+            {'mac': 1, 'hostname': 1, '_id': 0},
+        )
+        return {
+            to_unifi[d['mac']]: d['hostname']
+            for d in docs
+            if d.get('hostname') and d.get('mac') in to_unifi
+        }
+    except Exception:
+        logger.warning('Nepodarilo sa načítať názvy zariadení z UniFi', exc_info=True)
+        return {}
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _unifi_ap_names() -> dict[str, str]:
+    """
+    Názvy prístupových bodov z UniFi controllera: {IP adresa: názov}.
+    Napr. {'192.168.1.230': 'Kostol'}. AP bez pomenovania v UniFi sa preskočia.
+    Pri probléme vráti prázdny dict – zobrazí sa potom holá IP adresa.
+    """
+    from django.conf import settings
+
+    if not settings.UNIFI_MONGO_USER:
+        return {}
+
+    client = None
+    try:
+        from pymongo import MongoClient
+
+        client = MongoClient(
+            host=settings.UNIFI_MONGO_HOST,
+            username=settings.UNIFI_MONGO_USER,
+            password=settings.UNIFI_MONGO_PASS,
+            authSource='admin',
+            serverSelectionTimeoutMS=2000,
+            connectTimeoutMS=2000,
+            socketTimeoutMS=2000,
+        )
+        docs = client['unifi']['device'].find({}, {'ip': 1, 'name': 1, '_id': 0})
+        return {d['ip']: d['name'] for d in docs if d.get('ip') and d.get('name')}
+    except Exception:
+        logger.warning('Nepodarilo sa načítať názvy AP z UniFi', exc_info=True)
+        return {}
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _session_display_names(sessions) -> dict:
+    """
+    Pripraví názvy zariadení a AP pre zoznam sessions – hromadne, nie v cykle,
+    aby to nerobilo N+1 dotazov.
+
+    Názvy zariadení berie z user_devices.label (napĺňa sa z UniFi pri prezeraní
+    zariadení používateľa), pre zvyšok doplní priamo z UniFi.
+    """
+    macs = {s.calling_station_id for s in sessions if s.calling_station_id}
+
+    device_names = dict(
+        UserDevice.objects.filter(mac_address__in=macs)
+        .exclude(label='')
+        .values_list('mac_address', 'label')
+    )
+    # Zariadenia, ktoré ešte nie sú v registri s názvom, skús doplniť z UniFi
+    missing = [m for m in macs if m not in device_names]
+    if missing:
+        device_names.update(_unifi_hostnames(missing))
+
+    return {'device_names': device_names, 'ap_names': _unifi_ap_names()}
 
 
 def _resolve_device_name(mac_address: str) -> str:
     """
-    Zistí sieťové meno zariadenia cez reverse DNS z jeho poslednej IP adresy.
+    Záloha, keď UniFi názov nepozná: reverse DNS z poslednej IP adresy zariadenia.
     IP berie z radius_sessions (framed_ip_address) – zapísaná FreeRADIUSom pri accountingu.
+    Pri WiFi klientoch to väčšinou nevráti nič (nemajú PTR záznam).
     """
     session = RadiusSession.objects.filter(
         calling_station_id__iexact=mac_address,
@@ -147,10 +262,13 @@ class UserDevicesView(APIView):
         devices = list(UserDevice.objects.filter(username=username))
         limit_obj = UserDeviceLimit.objects.filter(username=username).first()
 
-        # Doplň/aktualizuj sieťové meno pre každé zariadenie
+        # Doplň/aktualizuj názov zariadenia – najprv hromadne z UniFi (jeden dotaz
+        # pre všetky MAC naraz), reverzný DNS len ako záloha pre zvyšok.
+        unifi_names = _unifi_hostnames([d.mac_address for d in devices])
+
         result = []
         for d in devices:
-            name = _resolve_device_name(d.mac_address)
+            name = unifi_names.get(d.mac_address) or _resolve_device_name(d.mac_address)
             if name and name != d.label:
                 d.label = name
                 d.save(update_fields=['label'])
@@ -191,5 +309,32 @@ class UserDeviceDeleteView(APIView):
         deleted, _ = UserDevice.objects.filter(username=username, mac_address=mac).delete()
         if not deleted:
             return Response({'detail': 'Zariadenie nenájdené.'}, status=404)
-        audit_log(request, 'delete_user_device', username, {'mac': mac})
+
+        # Samotné zmazanie z registra zariadenie NEODPOJÍ – ostalo by pripojené
+        # (a ďalej používalo WiFi) až kým sa samo neodpojí. Preto ho aj reálne
+        # deautentifikujeme na AP a uzavrieme jeho otvorené RADIUS sessions.
+        from django.utils import timezone
+
+        open_sessions = RadiusSession.objects.filter(
+            username=username,
+            calling_station_id=mac,
+            acct_stop_time__isnull=True,
+        )
+        disconnected = 0
+        for session in open_sessions:
+            try:
+                if ssh_deauth_mac(str(session.nas_ip_address), session.calling_station_id):
+                    disconnected += 1
+            except Exception:
+                # Odpojenie na AP je best-effort – aj tak session uzavrieme,
+                # aby stav v DB nezostal visieť ako "pripojený".
+                logger.exception(
+                    'Deauth zlyhal pri odstraneni zariadenia %s (%s)', mac, username
+                )
+            session.acct_stop_time = timezone.now()
+            session.acct_terminate_cause = 'Admin-Reset'
+            session.save(update_fields=['acct_stop_time', 'acct_terminate_cause'])
+
+        audit_log(request, 'delete_user_device', username,
+                  {'mac': mac, 'sessions_closed': len(open_sessions), 'deauthed': disconnected})
         return Response(status=204)
